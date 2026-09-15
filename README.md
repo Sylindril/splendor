@@ -10,6 +10,8 @@ One C env = one game of `num_players` seats; each seat is a PufferLib agent, so
 step = one Splendor turn: only the seat to move acts, the others are idle (mask
 = PASS only, reward 0), so a masked policy gets zero gradient there.
 
+![Four-player table in the GUI: board in the centre, a mat per player with cards stacked by color](docs/table_4p.png)
+
 ## Rules
 
 The real 2-4 player rules: 90 development cards in 3 tiers (4 face-up per
@@ -108,6 +110,8 @@ python elo.py --num-players 3 --games 300 --participants random greedy 'experime
 python elo.py --participants random greedy latest --mcts experiments/latest.pt:100
 ```
 
+![Elo of league checkpoints vs training steps, 2 and 4 players, with the greedy bot as reference](docs/elo_curve.png)
+
 `elo.py` plays a round robin (2 players) or random tables (3-4 players) with
 `splendor.agents.play_games`, fits Bradley-Terry ratings on the pairwise
 results and prints them on the Elo scale with `random` anchored at 0, also
@@ -181,6 +185,8 @@ agent, points, cards, nobles, tokens left), how the game ended and the turn
 count. "Hide results" collapses it to a strip so the whole table is visible;
 "New game" (or `N`) deals the next one.
 
+![End screen: the final board stays on the table with the standings](docs/end_screen_2p.png)
+
 The **Table** button opens the opponent picker: number of players, your seat
 (or watch), and per seat `random`, `greedy`, any checkpoint under
 `experiments/` (filtered to the chosen player count) with an optional MCTS
@@ -232,13 +238,8 @@ which deals the next game inside the terminal step.
 
 ## Citing
 
-A short technical note describing the environment, the league trainer and
-the results is in `paper/` (`main.pdf`); an arXiv link will replace the
-repository URL below once it is posted.
-
-If you use this environment, the trained models, or the GUI in research or a
-project, please cite it (GitHub's "Cite this repository" button uses
-`CITATION.cff`):
+Please cite this repository if you use the environment, the trained models, or
+the GUI. A short technical note is in `paper/` (`main.pdf`).
 
 ```bibtex
 @software{kumar2026splendor,
