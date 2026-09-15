@@ -56,10 +56,13 @@ def load_policy(path, num_players, device='cpu'):
 
 def latest_checkpoint(num_players, pattern='experiments/**/*.pt'):
     """Newest checkpoint under experiments/ trained for `num_players` (the
-    observation width differs per player count)."""
+    observation width differs per player count); falls back to the shipped
+    checkpoints in models/."""
     import torch
     want = L.obs_size(num_players)
-    for path in sorted(glob.glob(pattern, recursive=True), key=os.path.getmtime, reverse=True):
+    paths = sorted(glob.glob(pattern, recursive=True), key=os.path.getmtime, reverse=True)
+    paths += sorted(glob.glob('models/*.pt'), key=os.path.getmtime, reverse=True)
+    for path in paths:
         if os.path.basename(path) == 'trainer_state.pt':
             continue
         try:
@@ -69,7 +72,7 @@ def latest_checkpoint(num_players, pattern='experiments/**/*.pt'):
                 return path
         except Exception:
             continue
-    raise FileNotFoundError(f'no checkpoint for {num_players} players under experiments/')
+    raise FileNotFoundError(f'no checkpoint for {num_players} players under experiments/ or models/')
 
 
 class _Spaces:

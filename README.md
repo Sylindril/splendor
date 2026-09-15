@@ -32,6 +32,15 @@ not advance the turn counter. Illegal actions (per the mask) are treated as
 PASS outside a sub-phase and as the first legal option inside one; they are
 counted in `log.invalid` and carry no penalty. A masked policy never emits one.
 
+## Trained models
+
+`models/` ships two league-trained `Big` checkpoints (3 MB each, tracked in
+git): `splendor_2p_league_300M.pt` (2 players, 300M learner steps, about 230
+Elo above the greedy bot) and `splendor_4p_league_200M.pt` (4 players, 200M
+steps). `latest` resolves to the newest matching checkpoint under
+`experiments/` and falls back to these, and the GUI picker lists them, so
+`python gui.py --load-model-path latest` works on a fresh clone.
+
 ## Install and build
 
 ```bash
@@ -220,3 +229,7 @@ which deals the next game inside the terminal step.
 `env.get_state(i)` returns an opaque snapshot of game `i` and
 `env.put_state(i, state=...)` restores it (useful for search / MCTS);
 `env.put_state(i, bonuses=[...])` overwrites bonus cards for tests.
+
+## License
+
+MIT, see `LICENSE`.

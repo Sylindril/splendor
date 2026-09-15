@@ -24,6 +24,7 @@ from splendor import layout as L
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.path.join(HERE, 'splendor', 'gui', 'index.html')
 EXPERIMENTS = os.path.join(HERE, 'experiments')
+MODELS = os.path.join(HERE, 'models')  # shipped checkpoints (tracked in git)
 COLORS = L.COLOR_NAMES
 BOTS = ('random', 'greedy')
 MCTS_SIMS = 64                 # default simulations for a bare 'mcts:PATH'
@@ -120,13 +121,16 @@ def checkpoint_players(path):
     return None
 
 
-def checkpoints(root=EXPERIMENTS):
-    """[{path, label, num_players, mtime}] for every usable .pt under experiments/.
+def checkpoints(roots=(MODELS, EXPERIMENTS)):
+    """[{path, label, num_players, mtime}] for every usable .pt under models/
+    and experiments/.
 
     torch.load only re-runs for files whose (mtime, size) changed, so a training
     run dropping new checkpoints is picked up without re-reading the rest."""
     out = []
-    for path in glob.glob(os.path.join(root, '**', '*.pt'), recursive=True):
+    paths = [(root, p) for root in roots
+             for p in glob.glob(os.path.join(root, '**', '*.pt'), recursive=True)]
+    for root, path in paths:
         if os.path.basename(path) == 'trainer_state.pt':
             continue
         try:
@@ -141,7 +145,7 @@ def checkpoints(root=EXPERIMENTS):
         if hit[1] is None:
             continue
         out.append({'path': os.path.relpath(path, HERE),
-                    'label': os.path.relpath(path, root),
+                    'label': os.path.relpath(path, root if root == EXPERIMENTS else HERE),
                     'num_players': hit[1], 'mtime': st.st_mtime})
     out.sort(key=lambda c: -c['mtime'])
     return out

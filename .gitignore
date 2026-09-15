@@ -6,6 +6,7 @@ build/
 dist/
 experiments/
 *.pt
+!models/*.pt
 .DS_Store
 .venv/
 .pytest_cache/
