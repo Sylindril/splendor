@@ -1137,7 +1137,6 @@ function cardKeys(cell){                 /* [[cap, cls], ...] for the focused ca
   const a = cardActions(cardAt(cell));
   const buy = legalAction(a.buy), res = legalAction(a.res);
   const out = [];
-  if(buy || res) out.push(sel.length ? null : '↵');   /* Enter acts unless gems are picked */
   if(buy) out.push('B');
   if(res) out.push('R');
   return out.filter(Boolean);
@@ -1344,7 +1343,7 @@ function fitBoard(){
 function renderBar(){
   const bar = $('bar'); bar.innerHTML='';
   barBody(bar);
-  const k = el('span','khint','1-5 gems · ←↑→↓ cards · Enter act · Esc clear · ? keys');
+  const k = el('span','khint','1-5 gems · Enter take · ←↑→↓ cards · B buy · R reserve · Esc clear · ? keys');
   k.title = 'keyboard shortcuts (press ?)';
   k.onclick = ()=>{ legendOpen = !legendOpen; renderLegend(); };
   bar.appendChild(k);
@@ -1397,9 +1396,9 @@ function barBody(bar){
     const act = cardActions(activeCard());
     const buy = act.buy, res = act.res;
     bar.appendChild(el('span','hint', act.label));
-    if(buy!==null){ const b=btn('primary','Buy', S.mask[buy] ? '↵ / B' : 'B'); b.disabled=!S.mask[buy];
+    if(buy!==null){ const b=btn('primary','Buy','B'); b.disabled=!S.mask[buy];
       b.onclick=()=>send(buy); bar.appendChild(b); }
-    if(res!==null){ const b=btn(null,'Reserve', (!S.mask[buy] && S.mask[res]) ? '↵ / R' : 'R');
+    if(res!==null){ const b=btn(null,'Reserve','R');
       b.disabled=!S.mask[res]; b.onclick=()=>send(res); bar.appendChild(b); }
     const clr = btn('ghost','Cancel','Esc');
     clr.onclick=()=>{selCard=null; cursor=null; render(S)};
@@ -1524,8 +1523,9 @@ const KEYS = [
   ['1-5', 'take that gem (twice = two of a colour) · return it while discarding · pick a noble'],
   ['6', 'return a gold token (discard phase)'],
   ['← ↑ → ↓', 'move the card cursor: tier 3 / 2 / 1, then your reserved cards'],
-  ['Enter', 'take the selected gems, or buy the focused card (reserve if it cannot be bought)'],
-  ['B / R', 'buy / reserve the focused card (deck column reserves the top card)'],
+  ['Enter', 'take the selected gems'],
+  ['B', 'buy the focused card'],
+  ['R', 'reserve the focused card (deck column reserves the top card)'],
   ['Esc', 'clear the gems, the card selection and the cursor'],
   ['P', 'pass (only when passing is the sole legal move)'],
   ['N', 'new game'],
@@ -1964,13 +1964,13 @@ function typingSomewhere(){
   return t==='INPUT' || t==='SELECT' || t==='TEXTAREA' || a.isContentEditable===true;
 }
 function stop(e){ if(e && typeof e.preventDefault === 'function') e.preventDefault(); }
-function keyCard(which){                       /* B / R / Enter on a card */
+function keyCard(which){                       /* B / R on the focused card */
   const c = activeCard();
   if(!c) return false;
-  const a = cardActions(c);
-  const order = which==='buy' ? [a.buy] : which==='res' ? [a.res] : [a.buy, a.res];
-  for(let i=0;i<order.length;i++) if(legalAction(order[i])){ send(order[i]); return true; }
-  return false;
+  const a = which==='buy' ? cardActions(c).buy : cardActions(c).res;
+  if(!legalAction(a)) return false;
+  send(a);
+  return true;
 }
 function moveCursorBy(dx, dy){
   if(!cursor){ moveCursor({row:2, col:1}); return; }   /* home: tier 1, first card */
@@ -2009,10 +2009,9 @@ function onKey(e){
     if(i<5) clickGem(i);                      /* gold is never takeable */
     return;
   }
-  if(k==='Enter'){
+  if(k==='Enter'){                            /* Enter only confirms a gem take */
     stop(e);
-    if(sel.length){ const a = takeAction(); if(legalAction(a)) send(a); return; }
-    keyCard('any');
+    if(sel.length){ const a = takeAction(); if(legalAction(a)) send(a); }
     return;
   }
   if(low==='b'){ stop(e); keyCard('buy'); return; }
