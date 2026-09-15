@@ -1,0 +1,1986 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Splendor</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&display=swap">
+<style>
+/* ============================== tokens ============================== */
+:root{
+  --felt-1:#1b4d39; --felt-2:#0f3126; --felt-3:#061410;
+  --ink:#eef4f0; --ink-2:#cbdad2; --muted:#93aca1; --line:rgba(255,255,255,.13);
+  --glass:linear-gradient(180deg,rgba(255,255,255,.085),rgba(255,255,255,.032));
+  --glass-2:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.02));
+  --shadow:0 10px 26px rgba(0,0,0,.45);
+  --ok:#3ddc84; --ok-dim:rgba(61,220,132,.5);
+  --res:#5aa9ff; --res-dim:rgba(90,169,255,.5);
+  --sel:#b98bff; --sel-dim:rgba(185,139,255,.55);
+  --gold:#e9c766; --bronze:#c88a4a; --silver:#c9d2dd; --focus:#9ee7ff;
+  --display:"Cinzel",Georgia,"Iowan Old Style","Times New Roman",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+
+  /* everything on the table is derived from these three, so the whole board
+     scales with the viewport instead of living on fixed pixel sizes */
+  --cw: clamp(46px, min(8.5vw, 12.2vh), 210px);      /* development card width */
+  --ch: calc(var(--cw) * 1.38);
+  --gem: clamp(24px, min(3.0vw, 5.1vh), 56px);       /* bank gem diameter */
+  /* mat furniture has its own unit: the mats must NOT resize when the board
+     card size is fitted to the space left over, or the two would chase each
+     other every frame */
+  --mc: clamp(27px, min(3.1vw, 4.3vh), 74px);
+  --gap: clamp(4px, .55vw, 12px);
+  --mat: clamp(150px, 15vw, 290px);                  /* side player mat width */
+  --side: var(--mat);
+
+  --hi:#c6d2cc;--mid:#7b8a84;--lo:#3b453f;--glow:rgba(180,200,190,.35);
+  --fg:#10201a;--rim:rgba(255,255,255,.4);
+}
+/* per-gem palette: any element with .g0..g5 exposes these to its subtree */
+.g0{--hi:#fffdf3;--mid:#e9e3cd;--lo:#b9b198;--glow:rgba(255,251,230,.40);--fg:#3b3627;--rim:rgba(255,255,255,.55)}
+.g1{--hi:#a9cdff;--mid:#3b82f6;--lo:#11336f;--glow:rgba(74,142,255,.55);--fg:#fff;--rim:rgba(160,200,255,.5)}
+.g2{--hi:#9df5bd;--mid:#22c55e;--lo:#0c5029;--glow:rgba(45,210,110,.5);--fg:#fff;--rim:rgba(160,255,200,.45)}
+.g3{--hi:#ffb3ad;--mid:#ef4444;--lo:#701414;--glow:rgba(255,90,80,.5);--fg:#fff;--rim:rgba(255,180,175,.45)}
+.g4{--hi:#a3abc2;--mid:#41475a;--lo:#0d0f16;--glow:rgba(150,162,195,.42);--fg:#fff;--rim:rgba(190,200,225,.45)}
+.g5{--hi:#fff0b8;--mid:#f0c23c;--lo:#8d6209;--glow:rgba(250,200,70,.58);--fg:#402d05;--rim:rgba(255,240,190,.6)}
+
+/* ============================== shell ============================== */
+*{box-sizing:border-box}
+html{color-scheme:dark}
+html,body{height:100%;margin:0;overflow:hidden}
+body{
+  height:100dvh;color:var(--ink);font:13px/1.4 var(--sans);
+  display:grid;grid-template-rows:auto minmax(0,1fr);
+  background:
+    radial-gradient(120% 80% at 50% -18%, rgba(120,255,200,.10), transparent 62%),
+    radial-gradient(100% 100% at 50% 48%, var(--felt-1) 0%, var(--felt-2) 46%, var(--felt-3) 100%)
+    fixed #08170f;
+}
+body::before{            /* felt weave */
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.28;
+  mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+}
+body::after{             /* table vignette */
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(112% 86% at 50% 45%, transparent 36%, rgba(0,0,0,.30) 72%, rgba(0,0,0,.66) 100%);
+}
+#defs{position:absolute;width:0;height:0;overflow:hidden}
+
+/* ============================== header ============================== */
+header#top{
+  position:relative;z-index:3;display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  padding:7px clamp(8px,1.2vw,22px);border-bottom:1px solid rgba(255,255,255,.07);
+  background:linear-gradient(180deg,rgba(0,0,0,.28),rgba(0,0,0,0));
+}
+.brand{display:flex;align-items:center;gap:8px;flex:none}
+.logo{width:26px;height:26px;flex:none;border-radius:8px;display:grid;place-items:center;
+  font-size:12px;color:#2a1e02;
+  background:radial-gradient(circle at 32% 26%,#fff3c4,#e9c766 48%,#a5760f 100%);
+  box-shadow:0 0 14px rgba(233,199,102,.4),inset 0 1px 0 rgba(255,255,255,.7)}
+h1{font-family:var(--display);font-size:16px;margin:0;letter-spacing:2.6px;font-weight:700;
+  background:linear-gradient(180deg,#fff8e2,#e0c375 70%,#b18e3c);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.badge{background:var(--glass-2);border:1px solid var(--line);border-radius:999px;
+  padding:4px 10px;font-size:11px;color:var(--ink-2);white-space:nowrap;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+.badge b{color:var(--gold);font-weight:700}
+.badge.think{border-color:rgba(233,199,102,.45);color:#f5e3ab}
+.badge.think::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;
+  margin-right:6px;background:var(--gold);box-shadow:0 0 8px var(--gold);
+  animation:pulse 1.1s ease-in-out infinite;vertical-align:middle}
+@keyframes pulse{0%,100%{opacity:.25;transform:scale(.7)}50%{opacity:1;transform:scale(1.15)}}
+.spacer{flex:1 1 20px}
+.controls{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.watchonly{display:flex;gap:7px;align-items:center}
+.watchonly.off{display:none}
+
+button{font:600 12px/1 var(--sans);color:var(--ink);cursor:pointer;
+  background:var(--glass);border:1px solid var(--line);border-radius:9px;padding:7px 12px;
+  box-shadow:0 2px 7px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.1);
+  transition:transform .12s ease,box-shadow .18s ease,border-color .18s ease}
+button:hover:not(:disabled){border-color:rgba(255,255,255,.3);transform:translateY(-1px)}
+button:active:not(:disabled){transform:translateY(1px)}
+button:disabled{opacity:.35;cursor:default}
+button.primary{color:#241a02;border-color:rgba(255,235,170,.55);
+  background:linear-gradient(180deg,#ffe9a8,#e6bf59 55%,#c69a34);
+  box-shadow:0 3px 14px rgba(233,199,102,.32),inset 0 1px 0 rgba(255,255,255,.75)}
+button.ghost{background:transparent}
+.switch{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none}
+.switch input{accent-color:var(--gold);width:14px;height:14px;cursor:pointer;margin:0}
+input[type=range]{width:88px;accent-color:var(--gold);vertical-align:middle;cursor:pointer;
+  background:transparent}
+
+/* ============================== the table ============================== */
+#table{
+  position:relative;z-index:1;display:grid;min-height:0;gap:var(--gap);
+  padding:var(--gap) clamp(6px,1vw,20px) clamp(6px,.9vh,16px);
+  grid-template-columns:var(--side) minmax(0,1fr) var(--side);
+  grid-template-rows:auto minmax(0,1fr) auto auto;
+  grid-template-areas:
+    "left  top   right"
+    "left  board right"
+    "left  log   right"
+    "left  me    right";
+}
+#table.p2{--side:0px}
+#seatTop{grid-area:top;justify-self:center;max-width:100%}
+#seatLeft{grid-area:left;align-self:center;min-height:0}
+#seatRight{grid-area:right;align-self:center;min-height:0}
+#logstrip{grid-area:log;min-width:0}
+#me{grid-area:me;display:flex;flex-direction:column;gap:var(--gap);min-width:0}
+#me>*{flex:none}   /* the bar and the results dock never squash into each other */
+[hidden]{display:none!important}
+
+#board{grid-area:board;min-height:0;min-width:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:calc(var(--gap)*1.2)}
+#topline{display:flex;gap:clamp(10px,2vw,40px);align-items:center;justify-content:center;
+  flex-wrap:wrap;max-width:100%}
+.zone{display:flex;align-items:center;gap:calc(var(--gap)*1.1)}
+.zlab{font-family:var(--display);font-size:9px;letter-spacing:2px;text-transform:uppercase;
+  color:rgba(233,199,102,.75);writing-mode:vertical-rl;transform:rotate(180deg);
+  align-self:stretch;display:flex;align-items:center}
+#tiers{display:flex;flex-direction:column;gap:var(--gap)}
+.tier{display:flex;gap:var(--gap);align-items:stretch;justify-content:center}
+.tier.t1{--frame:var(--bronze);--frame-soft:rgba(200,138,74,.34)}
+.tier.t2{--frame:var(--silver);--frame-soft:rgba(201,210,221,.30)}
+.tier.t3{--frame:var(--gold);--frame-soft:rgba(233,199,102,.36)}
+
+/* ============================== gems ============================== */
+.gs{display:block;width:100%;height:100%;overflow:visible}
+.gem{position:relative;width:var(--gem);height:var(--gem);flex:none;
+  filter:drop-shadow(0 3px 7px rgba(0,0,0,.55)) drop-shadow(0 0 10px var(--glow));
+  transition:transform .16s ease,opacity .2s ease,filter .2s ease}
+.gem .n{position:absolute;right:-4px;bottom:-4px;min-width:19px;height:19px;padding:0 4px;
+  border-radius:999px;background:linear-gradient(180deg,#22302a,#0d1713);
+  border:1px solid rgba(255,255,255,.26);color:var(--ink);
+  font:700 11px/17px var(--sans);text-align:center;box-shadow:0 2px 5px rgba(0,0,0,.5);z-index:2}
+.gem.pick{cursor:pointer}
+.gem.pick:hover{transform:translateY(-4px) scale(1.06)}
+.gem.dim{opacity:.22;filter:grayscale(.6)}
+.gem.on{filter:drop-shadow(0 0 0 var(--sel)) drop-shadow(0 0 12px var(--sel))
+              drop-shadow(0 0 4px var(--sel)) drop-shadow(0 3px 7px rgba(0,0,0,.5));
+  transform:translateY(-4px) scale(1.06)}
+.gem.empty{opacity:.45;filter:saturate(.6) brightness(.72)}
+
+.chip{position:relative;flex:none;width:var(--csz,26px);height:var(--csz,26px);
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.5))}
+.chip .cn{position:absolute;inset:0;display:grid;place-items:center;
+  font:800 calc(var(--csz,26px)*.46)/1 var(--sans);color:var(--fg);
+  text-shadow:0 1px 1px rgba(255,255,255,.35);pointer-events:none}
+.chip.z{opacity:.28;filter:saturate(.25)}
+.chip.pick{cursor:pointer;opacity:1;filter:drop-shadow(0 0 4px var(--sel)) drop-shadow(0 0 10px var(--sel-dim))}
+.chip.pick:hover{transform:translateY(-3px) scale(1.1)}
+.pip{position:relative;width:var(--psz,19px);height:var(--psz,19px);flex:none}
+.pip .cn{position:absolute;inset:0;display:grid;place-items:center;
+  font:800 calc(var(--psz,19px)*.62)/1 var(--sans);color:var(--fg);pointer-events:none;
+  text-shadow:0 1px 1px rgba(255,255,255,.3)}
+
+/* ============================== cards ============================== */
+.slot{position:relative;width:var(--cw);height:var(--ch);flex:none}
+.card{position:absolute;inset:0;border-radius:calc(var(--cw)*.10);overflow:hidden;
+  display:flex;flex-direction:column;
+  border:1px solid var(--frame-soft,rgba(255,255,255,.14));
+  background:linear-gradient(168deg,#28303c 0%,#1a2029 42%,#141922 100%);
+  box-shadow:0 5px 14px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.09);
+  transition:transform .14s ease,box-shadow .2s ease,border-color .2s ease}
+.card .art{position:absolute;inset:0;width:100%;height:100%;display:block}
+.card .band{position:relative;z-index:2;height:24%;display:flex;align-items:center;
+  justify-content:space-between;gap:4px;padding:0 6%;color:var(--fg);
+  background:linear-gradient(180deg,var(--hi),var(--mid) 58%,var(--lo));
+  box-shadow:inset 0 -1px 0 rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.45)}
+.card .band .bg{width:calc(var(--cw)*.19);height:calc(var(--cw)*.19);flex:none}
+.card .band .pts{font-family:var(--display);font-size:calc(var(--cw)*.24);font-weight:700;
+  line-height:1;text-shadow:0 1px 0 rgba(255,255,255,.3)}
+.card .costs{position:relative;z-index:2;margin-top:auto;padding:5% 6%;
+  display:flex;flex-direction:column;gap:3%;align-items:flex-start}
+.card .costs .pip{--psz:clamp(13px,calc(var(--cw)*.185),42px)}
+.noble .reqs .pip{--psz:clamp(11px,calc(var(--cw)*.135),32px)}
+.card .costs::before{content:"";position:absolute;left:0;top:-6%;bottom:0;width:38%;
+  pointer-events:none;border-radius:0 40% 0 0;
+  background:linear-gradient(90deg,rgba(0,0,0,.55),rgba(0,0,0,0))}
+.card.empty{background:repeating-linear-gradient(45deg,rgba(255,255,255,.035) 0 7px,transparent 7px 14px),
+  linear-gradient(168deg,rgba(255,255,255,.03),rgba(0,0,0,.18));
+  border-style:dashed;border-color:rgba(255,255,255,.12);box-shadow:none}
+.card.empty::before{content:"\25C7";position:absolute;inset:0;display:grid;place-items:center;
+  font-size:calc(var(--cw)*.22);color:rgba(255,255,255,.13)}
+.card.back{align-items:center;justify-content:center}
+.card.back .bk{position:relative;z-index:2;font-family:var(--display);
+  font-size:calc(var(--cw)*.10);letter-spacing:1.4px;text-transform:uppercase;
+  color:rgba(255,255,255,.5)}
+.deck{width:calc(var(--cw)*.84);cursor:default}
+.deck .dcount{position:absolute;z-index:2;bottom:5%;left:0;right:0;text-align:center;
+  font:600 calc(var(--cw)*.10)/1 var(--sans);color:rgba(255,255,255,.55);letter-spacing:.4px}
+
+.clickable{cursor:pointer}
+.clickable:hover{transform:translateY(-4px)}
+.buyable{border-color:rgba(61,220,132,.65);
+  box-shadow:0 0 0 2px var(--ok),0 0 18px var(--ok-dim),0 6px 14px rgba(0,0,0,.45)}
+.reservable{border-color:rgba(90,169,255,.6);
+  box-shadow:inset 0 0 0 1.5px rgba(90,169,255,.8),0 5px 14px rgba(0,0,0,.45)}
+.buyable.reservable{box-shadow:0 0 0 2px var(--ok),inset 0 0 0 1.5px rgba(90,169,255,.8),
+  0 0 18px var(--ok-dim),0 6px 14px rgba(0,0,0,.45)}
+.chosen{border-color:var(--sel)!important;
+  box-shadow:0 0 0 3px var(--sel),0 0 22px var(--sel-dim)!important}
+/* the keyboard cursor: an outline, so it composes with buyable / chosen rings */
+.kfocus{outline:2px dashed var(--focus);outline-offset:3px;z-index:4}
+.slot.kfocus{outline-offset:1px}
+
+/* freshly dealt card: ring + NEW tag so a replacement is never a surprise */
+.slot.fresh .card{box-shadow:0 0 0 2px var(--gold),0 0 24px rgba(233,199,102,.55),
+  0 6px 16px rgba(0,0,0,.5)}
+.newtag{position:absolute;z-index:6;top:-7px;left:50%;transform:translateX(-50%);
+  padding:2px 7px;border-radius:999px;pointer-events:none;
+  font:800 9px/1.3 var(--sans);letter-spacing:1.4px;color:#2a1e02;
+  background:linear-gradient(180deg,#fff0bd,#e9c766);
+  box-shadow:0 2px 8px rgba(0,0,0,.5),0 0 14px rgba(233,199,102,.7);
+  animation:tagin .35s cubic-bezier(.2,1.3,.4,1)}
+@keyframes tagin{from{opacity:0;transform:translateX(-50%) translateY(6px) scale(.7)}}
+.newtag.out{opacity:0;transform:translateX(-50%) translateY(-8px);transition:opacity .5s,transform .5s}
+
+/* ============================== nobles ============================== */
+.noble{position:relative;width:calc(var(--cw)*.78);height:calc(var(--cw)*.78);flex:none;
+  border-radius:calc(var(--cw)*.10);overflow:hidden;
+  border:1px solid rgba(233,199,102,.45);
+  box-shadow:0 5px 14px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.12);
+  transition:transform .14s ease,box-shadow .2s ease}
+.noble .art{position:absolute;inset:0;width:100%;height:100%}
+.noble .reqs{position:absolute;z-index:2;left:0;right:0;bottom:5%;display:flex;
+  gap:3%;justify-content:center;flex-wrap:wrap}
+.noble .p3{position:absolute;z-index:2;top:3%;left:8%;font-family:var(--display);font-weight:700;
+  font-size:calc(var(--cw)*.17);color:var(--gold);text-shadow:0 1px 2px rgba(0,0,0,.7)}
+.noble.clickable:hover{transform:translateY(-4px)}
+
+/* ============================== player mats ============================== */
+.mat{position:relative;border-radius:13px;overflow:hidden;
+  padding:calc(var(--gap)*.9) calc(var(--gap)*1.2);
+  background:var(--glass);border:1px solid var(--line);min-width:0;
+  box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.1);
+  display:flex;flex-direction:column;gap:calc(var(--gap)*.8);
+  transition:border-color .25s ease,box-shadow .25s ease}
+.mat.wide{flex-direction:row;align-items:center;gap:clamp(8px,1.3vw,26px);flex-wrap:wrap}
+.mat.acting{border-color:rgba(233,199,102,.6);
+  box-shadow:0 0 0 1px rgba(233,199,102,.4),0 0 26px rgba(233,199,102,.24),var(--shadow);
+  animation:matglow 2.2s ease-in-out infinite}
+@keyframes matglow{0%,100%{box-shadow:0 0 0 1px rgba(233,199,102,.36),0 0 18px rgba(233,199,102,.18),var(--shadow)}
+                   50%{box-shadow:0 0 0 1px rgba(233,199,102,.62),0 0 34px rgba(233,199,102,.34),var(--shadow)}}
+.mat.bump{animation:bump .4s ease-out}
+@keyframes bump{50%{transform:scale(1.025)}}
+.msec{display:flex;align-items:center;gap:5px;min-width:0;max-width:100%}
+.mhead{gap:8px}
+.av{width:26px;height:26px;flex:none;border-radius:8px;display:grid;place-items:center;
+  font:800 12px/1 var(--sans);color:#0d1712;
+  background:radial-gradient(circle at 32% 26%,#dff7e8,#8fd8ad 45%,#3f8b63 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 2px 7px rgba(0,0,0,.45)}
+.mat.you .av{background:radial-gradient(circle at 32% 26%,#fff3c4,#e9c766 48%,#a5760f 100%)}
+.mwho{min-width:0}
+.mname{font-weight:700;font-size:12px;letter-spacing:.2px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.magent{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:15ch}
+.magent .bot{color:var(--ink-2);font-weight:600}
+.mpts{margin-left:auto;display:flex;align-items:baseline;gap:2px;line-height:1}
+.mpts b{font-family:var(--display);font-size:24px;font-weight:700;
+  background:linear-gradient(180deg,#fff8e2,#e0c375 70%,#b08c3a);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.mpts span{font-size:9px;color:var(--muted);letter-spacing:.6px}
+.mprog{height:4px;border-radius:999px;background:rgba(0,0,0,.4);overflow:hidden;flex:none;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.5);width:100%}
+.mat.wide .mprog{width:clamp(50px,7vw,120px)}
+.mprog i{display:block;height:100%;border-radius:999px;
+  background:linear-gradient(90deg,#7fe0a8,#e9c766);box-shadow:0 0 8px rgba(233,199,102,.55);
+  transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.mtag{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;
+  flex:none;white-space:nowrap}
+.mtok{flex-wrap:wrap;gap:4px}
+.mtok .chip{--csz:calc(var(--mc)*.78)}
+
+/* purchased cards, stacked by bonus colour */
+.stacks{display:flex;gap:4px;align-items:flex-end;flex-wrap:nowrap;width:100%}
+.stk{position:relative;flex:1 1 0;min-width:0;max-width:var(--mc);aspect-ratio:3/4}
+.mat.wide .stacks{width:auto}
+.mat.wide .stk{flex:0 0 auto;width:var(--mc)}
+.stk .sl{position:absolute;left:0;right:0;top:0;bottom:0;border-radius:5px;
+  background:linear-gradient(170deg,var(--mid),var(--lo));
+  border:1px solid rgba(255,255,255,.18);opacity:.55;
+  transform:translate(calc(var(--i) * 2.2px), calc(var(--i) * -2.6px))}
+.stk .face{position:absolute;inset:0;border-radius:5px;z-index:3;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  background:linear-gradient(170deg,var(--hi),var(--mid) 52%,var(--lo));
+  border:1px solid var(--rim);box-shadow:0 2px 6px rgba(0,0,0,.5)}
+.stk .face .sg{width:42%;height:42%;opacity:.9}
+.stk .face b{font:800 clamp(9px,calc(var(--mc)*.42),22px)/1 var(--sans);color:var(--fg)}
+.stk.z .face{background:linear-gradient(170deg,rgba(255,255,255,.07),rgba(0,0,0,.2));
+  border-color:rgba(255,255,255,.12);opacity:.5}
+.stk.z .face b{color:var(--muted)}
+.stk .sp{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;
+  border-radius:999px;z-index:4;
+  background:linear-gradient(180deg,#fff0bd,#e0b94f);color:#3a2a04;
+  font:800 9px/14px var(--sans);text-align:center;
+  box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.mres{gap:4px}
+.mres .slot{width:calc(var(--mc)*1.18);height:calc(var(--mc)*1.63)}
+.mres .slot .card{border-radius:4px}
+.mres .card .band{height:26%}
+.mres .card .band .pts{font-size:calc(var(--mc)*.34)}
+.mres .card .band .bg{width:calc(var(--mc)*.26);height:calc(var(--mc)*.26)}
+.mres .card .costs{padding:4% 6%;gap:2%}
+.mres .card .costs::before{display:none}
+.mres .card.back .bk{display:none}          /* no room for a caption this small */
+.mres .card .costs .pip{--psz:calc(var(--mc)*.32)}
+.mnob{gap:3px}
+.nob{width:calc(var(--mc)*.72);height:calc(var(--mc)*.72);flex:none;border-radius:5px;
+  overflow:hidden;border:1px solid rgba(233,199,102,.5);box-shadow:0 1px 4px rgba(0,0,0,.5)}
+.nob svg{width:100%;height:100%;display:block}
+.thinking{display:inline-flex;gap:3px;align-items:center;margin-left:3px}
+.thinking i{width:4px;height:4px;border-radius:50%;background:var(--gold);display:block;
+  animation:bounce 1s ease-in-out infinite}
+.thinking i:nth-child(2){animation-delay:.15s}
+.thinking i:nth-child(3){animation-delay:.3s}
+@keyframes bounce{0%,100%{opacity:.2;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+
+/* ============================== action bar ============================== */
+#bar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;justify-content:center;
+  padding:6px 14px;border-radius:999px;min-height:34px;
+  background:linear-gradient(180deg,rgba(26,44,36,.86),rgba(12,26,20,.86));
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 8px 22px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.12)}
+#bar .mtag{color:var(--gold);font-size:9px}
+#bar button{padding:6px 14px;border-radius:999px}
+.hint{color:var(--muted);font-size:12px}
+
+/* ============================== log strip ============================== */
+#logstrip{display:flex;flex-direction:column;gap:4px;
+  border:1px solid var(--line);border-radius:10px;padding:4px 9px;
+  background:rgba(0,0,0,.24)}
+.lhead{display:flex;align-items:center;gap:8px;min-width:0}
+#logToggle{padding:2px 7px;border-radius:7px;font-size:10px;flex:none}
+#last{font-size:11px;color:var(--ink-2);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;flex:1 1 auto;min-width:0}
+#logBox{display:flex;flex-direction:column;gap:3px;max-height:20vh;overflow-y:auto;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent;padding-bottom:2px}
+#logBox::-webkit-scrollbar{width:5px}
+#logBox::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:99px}
+.logline{display:flex;gap:7px;align-items:baseline;font-size:11px;color:var(--ink-2);
+  padding:3px 7px;border-radius:6px;background:rgba(255,255,255,.035);
+  border-left:2px solid rgba(255,255,255,.12)}
+.logline.s0{border-left-color:var(--gold)}
+.logline.s1{border-left-color:#7fe0a8}
+.logline.s2{border-left-color:var(--res)}
+.logline.s3{border-left-color:#f08ba0}
+.logline .who{font-weight:700;color:var(--ink);font-size:10px;flex:none}
+.logline.fresh{animation:slidein .4s ease-out}
+@keyframes slidein{from{transform:translateY(-6px);background:rgba(233,199,102,.2)}}
+
+/* ============================== fx layer ============================== */
+#fx{position:fixed;inset:0;z-index:80;pointer-events:none;overflow:hidden}
+#fx .card,#fx .noble,#fx .chip,#fx .gem{position:fixed}
+.flyc{border-radius:7px;box-shadow:0 14px 34px rgba(0,0,0,.6),0 0 22px rgba(233,199,102,.35)}
+
+/* ====================== game over: the results dock ======================
+   The finished board stays fully rendered; the standings are DOCKED in the
+   grid (above the action bar) so they never cover a card, a mat or a token. */
+@keyframes rise{from{transform:translateY(24px) scale(.94)}to{transform:none}}
+#results{min-width:0;display:flex;justify-content:center}
+.over-card{position:relative;display:flex;align-items:center;gap:clamp(8px,1.5vw,24px);
+  flex-wrap:wrap;max-width:100%;padding:7px clamp(10px,1.4vw,18px);border-radius:16px;
+  background:linear-gradient(170deg,rgba(42,58,48,.96),rgba(14,26,20,.97));
+  border:1px solid rgba(233,199,102,.45);
+  box-shadow:0 12px 32px rgba(0,0,0,.6),0 0 40px rgba(233,199,102,.16);
+  animation:rise .45s cubic-bezier(.2,.9,.25,1)}
+.over-head{display:flex;align-items:center;gap:9px;min-width:0}
+.over-crown{font-size:22px;line-height:1;filter:drop-shadow(0 0 10px rgba(233,199,102,.6))}
+.over-who{font-family:var(--display);font-size:clamp(14px,1.5vw,20px);font-weight:700;
+  line-height:1.15;white-space:nowrap;
+  background:linear-gradient(180deg,#fff8e2,#e6c97f 65%,#b08c3a);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.over-sub{font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted);
+  white-space:nowrap}
+.over-wrap{overflow:auto;max-height:26vh;min-width:0;
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
+.rtable{border-collapse:collapse}
+.rtable th{font:700 8px/1.6 var(--sans);letter-spacing:1.2px;text-transform:uppercase;
+  color:var(--muted);padding:0 clamp(4px,.6vw,11px) 3px;text-align:right;
+  border-bottom:1px solid var(--line);white-space:nowrap}
+.rtable th.l,.rtable td.l{text-align:left}
+.rtable td{padding:2px clamp(4px,.6vw,11px);font-size:11px;color:var(--ink-2);
+  white-space:nowrap;max-width:16ch;overflow:hidden;text-overflow:ellipsis}
+.rtable td.num{font-family:var(--display);font-size:13px;color:var(--ink);text-align:right}
+.rtable tr.win td{color:#fff8e2}
+.rtable tr.win td.num{color:var(--gold)}
+.rtable tr.win td.l::before{content:"\265B";color:var(--gold);margin-right:5px}
+.rtable td.rk{font-family:var(--display);color:var(--muted);text-align:right}
+.over-foot{display:flex;gap:7px;align-items:center;margin-left:auto}
+.over-slim{display:flex;align-items:center;gap:9px;padding:4px 6px 4px 13px;border-radius:999px;
+  background:linear-gradient(180deg,rgba(26,44,36,.9),rgba(12,26,20,.9));
+  border:1px solid rgba(233,199,102,.4);box-shadow:0 6px 18px rgba(0,0,0,.45)}
+.over-slim .over-who{font-size:14px}
+
+/* ============================== key legend ============================== */
+.khint{font-size:10px;color:var(--muted);white-space:nowrap;cursor:pointer;opacity:.8}
+.khint:hover{opacity:1}
+#legend{position:fixed;z-index:98;right:14px;bottom:14px;padding:11px 14px 12px;
+  max-width:min(340px,calc(100vw - 28px));border-radius:14px;
+  background:linear-gradient(170deg,rgba(32,48,39,.97),rgba(11,22,17,.98));
+  border:1px solid rgba(233,199,102,.35);box-shadow:0 20px 50px rgba(0,0,0,.65)}
+#legend h4{font-family:var(--display);font-size:10px;letter-spacing:2.2px;text-transform:uppercase;
+  color:var(--gold);margin:0 0 8px;font-weight:600}
+.krow{display:flex;gap:8px;align-items:baseline;margin:3px 0;font-size:11px;color:var(--ink-2)}
+.kk{flex:none;display:inline-block;min-width:18px;padding:1px 5px;border-radius:5px;
+  text-align:center;font:700 10px/1.5 var(--sans);color:var(--ink);
+  background:rgba(255,255,255,.1);border:1px solid var(--line);
+  box-shadow:0 1px 0 rgba(0,0,0,.45)}
+
+/* ============================== table picker ============================== */
+.setup{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;
+  background:radial-gradient(ellipse at 50% 42%,rgba(0,0,0,.5),rgba(0,0,0,.8));
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.setup-card{width:min(580px,100%);max-height:min(88vh,780px);overflow:auto;
+  position:relative;border-radius:18px;padding:17px 19px 15px;
+  background:linear-gradient(170deg,rgba(42,58,48,.97),rgba(14,26,20,.98));
+  border:1px solid rgba(233,199,102,.42);
+  box-shadow:0 26px 70px rgba(0,0,0,.7);animation:rise .35s cubic-bezier(.2,.9,.25,1);
+  scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
+.setup-card h2{font-family:var(--display);font-size:11px;text-transform:uppercase;
+  letter-spacing:2.2px;color:var(--gold);margin:0 0 13px;font-weight:600;
+  display:flex;align-items:center;gap:9px}
+.setup-card h2::after{content:"";flex:1;height:1px;
+  background:linear-gradient(90deg,rgba(233,199,102,.35),transparent)}
+.frow{display:flex;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap}
+.flab{font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted);
+  width:78px;flex:none}
+.seg{display:inline-flex;gap:3px;padding:3px;border-radius:999px;
+  background:rgba(0,0,0,.3);border:1px solid var(--line);flex-wrap:wrap}
+.seg button{padding:5px 13px;border-radius:999px;border:1px solid transparent;
+  background:transparent;box-shadow:none;font-size:12px;color:var(--ink-2)}
+.seg button.on{color:#241a02;border-color:rgba(255,235,170,.55);
+  background:linear-gradient(180deg,#ffe9a8,#e6bf59 55%,#c69a34)}
+select,input[type=number]{font:600 12px/1.15 var(--sans);color:var(--ink);padding:6px 8px;
+  border-radius:8px;border:1px solid var(--line);max-width:100%;
+  background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.03))}
+select:focus,input[type=number]:focus{outline:none;border-color:rgba(233,199,102,.6)}
+select:disabled,input:disabled{opacity:.4}
+select option{background:#132119;color:var(--ink)}
+.seatrow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:8px 9px;
+  margin-bottom:7px;border-radius:11px;background:rgba(255,255,255,.035);
+  border:1px solid var(--line)}
+.seatrow.me{border-color:rgba(233,199,102,.42);background:rgba(233,199,102,.07)}
+.seatrow .seat{display:flex;align-items:center;gap:8px;width:88px;flex:none;
+  font-size:12px;color:var(--ink-2)}
+.seatrow .av{width:24px;height:24px;border-radius:7px;font-size:11px}
+.seatrow.me .av{background:radial-gradient(circle at 32% 26%,#fff3c4,#e9c766 48%,#a5760f 100%)}
+.seatrow select{flex:1 1 180px;min-width:0}
+.seatrow .switch{font-size:11px;color:var(--ink-2)}
+.simbox{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+.simbox input[type=number]{width:66px}
+.setup-foot{display:flex;align-items:center;gap:9px;margin-top:13px;flex-wrap:wrap}
+.err{flex:1 1 100%;color:#ff9f9f;font-size:12px}
+.err:empty{display:none}
+
+/* ============================== narrow fallbacks ============================== */
+@media (max-width:1100px){
+  :root{--mat:clamp(132px,17vw,190px)}
+  .magent{max-width:11ch}
+  .mpts b{font-size:19px}
+}
+@media (max-width:820px){
+  #table{grid-template-columns:0 minmax(0,1fr) 0}
+  #seatLeft,#seatRight,#seatTop{grid-area:top;justify-self:stretch}
+  #seatTop{display:flex;gap:var(--gap)}
+  .zlab{display:none}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+                       transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<svg id="defs" aria-hidden="true"></svg>
+
+<header id="top">
+  <div class="brand"><span class="logo">&#9670;</span><h1>SPLENDOR</h1></div>
+  <span class="badge" id="turn">turn -</span>
+  <span class="badge" id="phase">-</span>
+  <span class="badge" id="mode">-</span>
+  <span class="spacer"></span>
+  <div class="controls">
+    <button id="tableBtn" class="ghost">Table</button>
+    <span class="watchonly" id="watchCtl">
+      <button id="stepBtn" class="ghost">Step</button>
+      <label class="badge switch"><input type="checkbox" id="auto"> auto</label>
+      <input type="range" id="speed" min="60" max="2000" step="20" value="600">
+      <span class="badge" id="speedLbl">600 ms</span>
+    </span>
+    <button id="resetBtn" class="primary">New game</button>
+  </div>
+</header>
+
+<main id="table">
+  <div id="seatTop"></div>
+  <div id="seatLeft"></div>
+  <div id="seatRight"></div>
+
+  <div id="board">
+    <div id="topline">
+      <div class="zone"><span class="zlab">Nobles</span><div id="nobles" class="zone"></div></div>
+      <div class="zone"><span class="zlab">Bank</span><div id="bank" class="zone"></div></div>
+    </div>
+    <div id="tiers"></div>
+  </div>
+
+  <div id="logstrip">
+    <div class="lhead">
+      <button id="logToggle" class="ghost">&#9656; log</button>
+      <span id="last">-</span>
+    </div>
+    <div id="logBox" hidden></div>
+  </div>
+
+  <div id="me">
+    <div id="results" hidden></div>
+    <div id="bar"></div>
+    <div id="seatMe"></div>
+  </div>
+</main>
+
+<div id="fx"></div>
+<div id="legend" hidden></div>
+
+<div class="setup" id="setup" hidden>
+  <div class="setup-card">
+    <h2>Table</h2>
+    <div id="setupBody"></div>
+    <div class="setup-foot">
+      <span class="err" id="setupErr"></span>
+      <span class="hint" id="setupNote"></span>
+      <span class="spacer"></span>
+      <button class="ghost" id="setupClose">Close</button>
+      <button class="primary" id="dealBtn">Deal new table</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = null, sel = [], selCard = null, busy = false, note = '';
+let resultsHidden = false;         /* "Hide results" while the board is inspected */
+let cursor = null, legendOpen = false, cursorNodes = {};   /* keyboard navigation */
+let logLines = [], lastLogged = null;
+let OPT = null, CFG = null, cfgBusy = false, cfgErr = '';
+let lastEventId = -1, animating = 0, animQ = Promise.resolve(), logOpen = false;
+let animSince = 0;                 /* watchdog: never let the queue wedge the poll */
+
+const REDUCE = (typeof matchMedia === 'function')
+  && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- tiny helpers ---------- */
+function el(tag, cls, txt){ const e=document.createElement(tag); if(cls)e.className=cls;
+  if(txt!==undefined)e.textContent=txt; return e; }
+function fx(node, key){ if(node && node.setAttribute) node.setAttribute('data-fx', key); return node; }
+function q(key){ return (document.querySelector)
+  ? document.querySelector('[data-fx="'+key+'"]') : null; }
+function counts(list){ const c=[0,0,0,0,0]; list.forEach(x=>c[x]++); return c; }
+function subset(a,b){ return a.every((v,i)=>v<=b[i]); }
+function eq(a,b){ return a.every((v,i)=>v===b[i]); }
+function sum(a){ return a.reduce((x,y)=>x+y,0); }
+
+/* ================================================================== */
+/*  ART: inline SVG symbols for the gems, procedural card / noble art  */
+/* ================================================================== */
+const GEMS = [
+  {n:'diamond', hi:'#fffdf5', mid:'#e4ddc4', lo:'#9d968a', edge:'#fffef8'},
+  {n:'sapphire',hi:'#c4e0ff', mid:'#3b82f6', lo:'#0b2a60', edge:'#dbeaff'},
+  {n:'emerald', hi:'#bdf8d4', mid:'#22c55e', lo:'#08421f', edge:'#dcffea'},
+  {n:'ruby',    hi:'#ffc7c1', mid:'#ef4444', lo:'#5e0f0f', edge:'#ffe0dd'},
+  {n:'onyx',    hi:'#c2c8d8', mid:'#3e4454', lo:'#080a10', edge:'#dde1ee'},
+  {n:'joker',   hi:'#fff5cf', mid:'#efc23c', lo:'#775006', edge:'#fff9e2'}
+];
+const TIER = [
+  {name:'I',  frame:'#c88a4a', frame2:'#8a5626', bg1:'#2b3341', bg2:'#161b24'},
+  {name:'II', frame:'#c9d2dd', frame2:'#79838f', bg1:'#2a3340', bg2:'#131922'},
+  {name:'III',frame:'#e9c766', frame2:'#9c7a24', bg1:'#332f2a', bg2:'#16161c'}
+];
+
+function ring(cx, cy, r, rot, n){
+  const p = [];
+  for(let i=0;i<n;i++){
+    const a = (rot + i*360/n) * Math.PI/180;
+    p.push((cx + r*Math.cos(a)).toFixed(1) + ',' + (cy + r*Math.sin(a)).toFixed(1));
+  }
+  return p;
+}
+/* one faceted gem: outer octagon body, 8 kite facets, a table and a specular */
+function gemSymbol(i){
+  const g = GEMS[i], O = ring(50,50,47,-112.5,8), T = ring(50,50,22,-112.5,8);
+  let s = '<symbol id="gm'+i+'" viewBox="0 0 100 100">';
+  s += '<defs>'
+    +  '<radialGradient id="gmb'+i+'" cx=".36" cy=".28" r=".85">'
+    +    '<stop offset="0" stop-color="'+g.hi+'"/>'
+    +    '<stop offset=".48" stop-color="'+g.mid+'"/>'
+    +    '<stop offset="1" stop-color="'+g.lo+'"/></radialGradient>'
+    +  '<linearGradient id="gmt'+i+'" x1="0" y1="0" x2=".3" y2="1">'
+    +    '<stop offset="0" stop-color="'+g.hi+'"/>'
+    +    '<stop offset=".6" stop-color="'+g.mid+'"/>'
+    +    '<stop offset="1" stop-color="'+g.lo+'"/></linearGradient>'
+    +  '</defs>';
+  s += '<polygon points="'+O.join(' ')+'" fill="url(#gmb'+i+')"/>';
+  for(let k=0;k<8;k++){
+    const pts = [O[k], O[(k+1)%8], T[(k+1)%8], T[k]].join(' ');
+    const lit = (k>=6 || k<=1);
+    s += '<polygon points="'+pts+'" fill="'+(lit?'#ffffff':'#000000')
+       + '" opacity="'+(lit ? (k%2?0.30:0.16) : (k%2?0.24:0.10))+'"/>';
+    s += '<polygon points="'+pts+'" fill="none" stroke="'+g.edge
+       + '" stroke-opacity=".34" stroke-width="1.1" stroke-linejoin="round"/>';
+  }
+  s += '<polygon points="'+T.join(' ')+'" fill="url(#gmt'+i+')"/>';
+  s += '<polygon points="'+T.join(' ')+'" fill="none" stroke="'+g.edge
+     + '" stroke-opacity=".55" stroke-width="1.2"/>';
+  s += '<polygon points="'+ring(50,48,11,-112.5,8).join(' ')
+     + '" fill="#fff" opacity=".22"/>';
+  s += '<ellipse cx="38" cy="32" rx="11" ry="6.5" fill="#fff" opacity=".65"'
+     + ' transform="rotate(-28 38 32)"/>';
+  s += '<polygon points="'+O.join(' ')+'" fill="none" stroke="'+g.edge
+     + '" stroke-opacity=".7" stroke-width="2" stroke-linejoin="round"/>';
+  return s + '</symbol>';
+}
+/* ornate deck back, one per tier */
+function backSymbol(t){
+  const T = TIER[t];
+  let s = '<symbol id="bk'+t+'" viewBox="0 0 100 138" preserveAspectRatio="none">';
+  s += '<defs><linearGradient id="bkg'+t+'" x1="0" y1="0" x2=".4" y2="1">'
+    +  '<stop offset="0" stop-color="'+T.bg1+'"/><stop offset="1" stop-color="'+T.bg2+'"/>'
+    +  '</linearGradient>'
+    +  '<pattern id="bkp'+t+'" width="14" height="14" patternUnits="userSpaceOnUse"'
+    +  ' patternTransform="rotate(45)">'
+    +  '<rect width="14" height="14" fill="none"/>'
+    +  '<path d="M0 7h14M7 0v14" stroke="'+T.frame+'" stroke-opacity=".16" stroke-width="1.4"/>'
+    +  '<circle cx="7" cy="7" r="1.6" fill="'+T.frame+'" fill-opacity=".22"/></pattern></defs>';
+  s += '<rect width="100" height="138" fill="url(#bkg'+t+')"/>';
+  s += '<rect width="100" height="138" fill="url(#bkp'+t+')"/>';
+  s += '<rect x="5" y="5" width="90" height="128" rx="7" fill="none" stroke="'+T.frame
+    +  '" stroke-opacity=".5" stroke-width="1.6"/>';
+  s += '<rect x="10" y="10" width="80" height="118" rx="5" fill="none" stroke="'+T.frame2
+    +  '" stroke-opacity=".55" stroke-width="1"/>';
+  s += '<circle cx="50" cy="69" r="26" fill="none" stroke="'+T.frame
+    +  '" stroke-opacity=".38" stroke-width="1.4"/>';
+  s += '<polygon points="'+ring(50,69,22,-90,8).join(' ')+'" fill="'+T.frame
+    +  '" fill-opacity=".12" stroke="'+T.frame+'" stroke-opacity=".45" stroke-width="1.2"/>';
+  s += '<text x="50" y="79" text-anchor="middle" font-family="Cinzel,Georgia,serif"'
+    +  ' font-size="26" font-weight="700" fill="'+T.frame+'" fill-opacity=".92">'+T.name+'</text>';
+  return s + '</symbol>';
+}
+/* four abstract noble portraits: crest colour, coronet and collar all vary */
+const NOBLE_ART = [
+  {a:'#3a3547', b:'#241f2c', c:'#15121b',
+   crown:'M33 27 L37 16 L43 24 L50 12 L57 24 L63 16 L67 27 Z',
+   collar:'M18 92 Q22 60 50 56 Q78 60 82 92 Z'},
+  {a:'#2c3d44', b:'#1b282d', c:'#101a1e',
+   crown:'M32 27 Q32 12 50 12 Q68 12 68 27 L60 22 L50 28 L40 22 Z',
+   collar:'M16 92 L26 60 Q50 50 74 60 L84 92 Z'},
+  {a:'#43333a', b:'#2a1f24', c:'#181014',
+   crown:'M32 27 L34 14 L42 21 L50 10 L58 21 L66 14 L68 27 L50 22 Z',
+   collar:'M20 92 Q26 62 50 58 Q74 62 80 92 L64 86 L50 92 L36 86 Z'},
+  {a:'#33384c', b:'#20243a', c:'#12141f',
+   crown:'M30 26 Q40 8 50 20 Q60 8 70 26 L50 21 Z',
+   collar:'M17 92 Q30 58 50 57 Q70 58 83 92 Z'}
+];
+function nobleSymbol(v){
+  const N = NOBLE_ART[v];
+  let s = '<symbol id="nbl'+v+'" viewBox="0 0 100 100">';
+  s += '<defs><linearGradient id="nblg'+v+'" x1="0" y1="0" x2=".4" y2="1">'
+    +  '<stop offset="0" stop-color="'+N.a+'"/><stop offset=".55" stop-color="'+N.b+'"/>'
+    +  '<stop offset="1" stop-color="'+N.c+'"/></linearGradient>'
+    +  '<radialGradient id="nblh'+v+'" cx=".5" cy=".26" r=".6">'
+    +  '<stop offset="0" stop-color="#e9c766" stop-opacity=".30"/>'
+    +  '<stop offset="1" stop-color="#e9c766" stop-opacity="0"/></radialGradient></defs>';
+  s += '<rect width="100" height="100" fill="url(#nblg'+v+')"/>';
+  s += '<rect width="100" height="100" fill="url(#nblh'+v+')"/>';
+  s += '<path d="'+N.collar+'" fill="#e9c766" fill-opacity=".20" stroke="#e9c766"'
+    +  ' stroke-opacity=".55" stroke-width="1.6" stroke-linejoin="round"/>';
+  s += '<circle cx="50" cy="40" r="15" fill="#e9c766" fill-opacity=".22"'
+    +  ' stroke="#e9c766" stroke-opacity=".6" stroke-width="1.6"/>';
+  s += '<path d="'+N.crown+'" fill="#e9c766" fill-opacity=".55" stroke="#ffe9a8"'
+    +  ' stroke-opacity=".7" stroke-width="1.2" stroke-linejoin="round"/>';
+  s += '<rect x="4" y="4" width="92" height="92" rx="8" fill="none" stroke="#e9c766"'
+    +  ' stroke-opacity=".4" stroke-width="1.5"/>';
+  return s + '</symbol>';
+}
+function nobleVariant(req){
+  let h = 2166136261;                       /* FNV-ish, so 3s and 4s do not collide */
+  (req || []).forEach((v,i)=>{
+    h = (h ^ ((v|0) + i*131)) >>> 0;
+    h = Math.imul(h, 16777619) >>> 0;
+  });
+  h = (h ^ (h >>> 15)) >>> 0;
+  return (h >>> 9) % NOBLE_ART.length;
+}
+function buildDefs(){
+  const host = $('defs');
+  if(!host) return;
+  let s = '';
+  for(let i=0;i<6;i++) s += gemSymbol(i);
+  for(let t=0;t<3;t++) s += backSymbol(t);
+  for(let v=0;v<NOBLE_ART.length;v++) s += nobleSymbol(v);
+  host.innerHTML = s;
+}
+function useSvg(cls, sym, view){
+  /* innerHTML keeps <use href> in the SVG namespace without manual createElementNS */
+  const w = el('span', cls);
+  w.innerHTML = '<svg class="gs" viewBox="' + (view||'0 0 100 100')
+    + '" preserveAspectRatio="xMidYMid meet"><use href="#' + sym + '"/></svg>';
+  return w;
+}
+function gemSvg(cls, color){ return useSvg(cls, 'gm'+color, '0 0 100 100'); }
+
+/* ---------- procedural card illustration ---------- */
+function rnd(seed){ let a = seed >>> 0;
+  return function(){ a = (a + 0x6D2B79F5)>>>0; let t = a;
+    t = Math.imul(t ^ (t>>>15), t | 1); t ^= t + Math.imul(t ^ (t>>>7), t | 61);
+    return ((t ^ (t>>>14))>>>0) / 4294967296; }; }
+const artCache = {};
+function cardArt(tier, bonus, cost){
+  const key = tier+'|'+bonus+'|'+cost.join('');
+  if(artCache[key]) return artCache[key];
+  const T = TIER[tier], G = GEMS[bonus];
+  let seed = tier*7919 + bonus*104729 + 1;
+  cost.forEach((v,i)=> seed += v * (i+3) * 2657);
+  const R = rnd(seed), pick = (a)=> a[Math.floor(R()*a.length)%a.length];
+  const tilt = (R()*14 - 7).toFixed(1);
+  let s = '<svg class="art" viewBox="0 0 100 138" preserveAspectRatio="none">';
+  s += '<defs><linearGradient id="a'+key.replace(/\|/g,'_')+'" x1="0" y1="0" x2=".35" y2="1">'
+    +  '<stop offset="0" stop-color="'+T.bg1+'"/><stop offset="1" stop-color="'+T.bg2+'"/>'
+    +  '</linearGradient></defs>';
+  s += '<rect width="100" height="138" fill="url(#a'+key.replace(/\|/g,'_')+')"/>';
+  /* a wash of the bonus colour so the card reads as "its" colour at a glance */
+  s += '<ellipse cx="50" cy="74" rx="52" ry="46" fill="'+G.mid+'" opacity=".11"/>';
+  s += '<ellipse cx="50" cy="52" rx="40" ry="30" fill="'+G.hi+'" opacity=".05"/>';
+
+  if(tier===0){                                   /* --- the mine --- */
+    s += '<rect y="96" width="100" height="42" fill="#000" opacity=".22"/>';
+    s += '<path d="M0 104 Q26 '+(92+R()*8).toFixed(0)+' 50 100 Q74 '
+      +  (94+R()*8).toFixed(0)+' 100 102 L100 138 L0 138 Z" fill="#05070a" opacity=".55"/>';
+    s += '<path d="M0 116 Q30 108 54 114 Q78 120 100 112 L100 138 L0 138 Z" fill="'
+      +  G.lo+'" opacity=".75"/>';
+    s += '<path d="M0 116 Q30 108 54 114 Q78 120 100 112" fill="none" stroke="'+G.hi
+      +  '" stroke-opacity=".35" stroke-width="1.2"/>';
+    /* pit-mouth arch, so tier I reads as a mine at a glance */
+    s += '<path d="M30 100 Q50 66 70 100 Z" fill="#000" opacity=".45"/>';
+    s += '<path d="M30 100 Q50 66 70 100" fill="none" stroke="'+T.frame
+      +  '" stroke-opacity=".6" stroke-width="2"/>';
+    /* crossed picks */
+    s += '<g transform="translate(52,74) rotate('+tilt+')" opacity=".72">'
+      +  '<path d="M-20 18 L14 -12" stroke="'+T.frame+'" stroke-width="3.2" stroke-linecap="round"/>'
+      +  '<path d="M-24 -10 Q-4 -20 16 -16 Q0 -8 -22 -6 Z" fill="'+T.frame
+      +  '" fill-opacity=".8"/>'
+      +  '<path d="M20 18 L-14 -12" stroke="'+T.frame2+'" stroke-width="3.2"'
+      +  ' stroke-linecap="round" opacity=".8"/></g>';
+    for(let i=0;i<4;i++)
+      s += '<polygon points="'+ring(12+R()*76, 112+R()*20, 3+R()*3.5, R()*90, 6).join(' ')
+        +  '" fill="'+G.hi+'" opacity="'+(0.4+R()*0.35).toFixed(2)+'" stroke="'+G.hi
+        +  '" stroke-opacity=".5" stroke-width=".8"/>';
+  } else if(tier===1){                            /* --- the vault --- */
+    s += '<path d="M24 112 L24 62 Q50 40 76 62 L76 112 Z" fill="'+G.lo
+      +  '" opacity=".42" stroke="'+T.frame+'" stroke-opacity=".5" stroke-width="1.6"/>';
+    s += '<path d="M32 112 L32 66 Q50 50 68 66 L68 112 Z" fill="none" stroke="'+T.frame2
+      +  '" stroke-opacity=".55" stroke-width="1.1"/>';
+    s += '<rect x="18" y="110" width="64" height="7" rx="2" fill="'+T.frame+'" opacity=".45"/>';
+    for(let i=0;i<3;i++){
+      const x = 30 + i*16, n = 2 + Math.floor(R()*3);
+      for(let k=0;k<n;k++)
+        s += '<ellipse cx="'+x+'" cy="'+(106-k*5)+'" rx="7" ry="2.6" fill="'+G.mid
+          +  '" opacity=".6" stroke="'+G.hi+'" stroke-opacity=".4" stroke-width=".7"/>';
+    }
+    s += '<circle cx="50" cy="70" r="9" fill="none" stroke="'+T.frame
+      +  '" stroke-opacity=".6" stroke-width="2"/>';
+    s += '<path d="M50 61 L50 79 M41 70 L59 70" stroke="'+T.frame
+      +  '" stroke-opacity=".5" stroke-width="1.6" transform="rotate('+tilt+' 50 70)"/>';
+  } else {                                        /* --- the crown --- */
+    for(let i=0;i<9;i++){
+      const a = (-90 + (i-4)*13) * Math.PI/180;
+      s += '<path d="M50 84 L'+(50+64*Math.cos(a)).toFixed(1)+' '
+        +  (84+64*Math.sin(a)).toFixed(1)+'" stroke="'+G.hi+'" stroke-opacity="'
+        +  (0.08 + R()*0.12).toFixed(2)+'" stroke-width="'+(2+R()*3).toFixed(1)+'"/>';
+    }
+    s += '<g transform="translate(50,74) rotate('+(tilt/3).toFixed(1)+')">'
+      +  '<path d="M-26 14 L-30 -16 L-14 -3 L0 -22 L14 -3 L30 -16 L26 14 Z" fill="'+T.frame
+      +  '" fill-opacity=".5" stroke="'+T.frame+'" stroke-opacity=".85" stroke-width="1.8"'
+      +  ' stroke-linejoin="round"/>'
+      +  '<rect x="-27" y="14" width="54" height="7" rx="3" fill="'+T.frame+'" fill-opacity=".7"/>'
+      +  '<circle cx="0" cy="-26" r="3.4" fill="'+G.hi+'" opacity=".9"/>'
+      +  '<circle cx="-30" cy="-20" r="2.4" fill="'+G.mid+'" opacity=".8"/>'
+      +  '<circle cx="30" cy="-20" r="2.4" fill="'+G.mid+'" opacity=".8"/></g>';
+    s += '<ellipse cx="50" cy="106" rx="30" ry="6" fill="'+T.frame+'" opacity=".2"/>';
+  }
+  /* big translucent bonus gem watermark */
+  s += '<g opacity=".22" transform="translate(52,80) rotate('+(pick([-9,0,9]))
+    +  ') scale(.42) translate(-50,-50)"><use href="#gm'+bonus+'"/></g>';
+  /* tier frame: rule + corner filigree */
+  s += '<rect x="3.5" y="3.5" width="93" height="131" rx="8" fill="none" stroke="'+T.frame
+    +  '" stroke-opacity=".55" stroke-width="1.5"/>';
+  const corner = 'M0 14 Q0 0 14 0 M3 14 Q3 3 14 3';
+  [[3,3,1,1],[97,3,-1,1],[3,135,1,-1],[97,135,-1,-1]].forEach(c=>{
+    s += '<path d="'+corner+'" transform="translate('+c[0]+','+c[1]+') scale('+c[2]+','+c[3]
+      +  ')" fill="none" stroke="'+T.frame+'" stroke-opacity=".8" stroke-width="1.6"/>';
+  });
+  s += '<rect width="100" height="138" fill="none"/></svg>';
+  artCache[key] = s;
+  return s;
+}
+
+/* ================================================================== */
+/*  RENDER                                                            */
+/* ================================================================== */
+function legalTakes(mask){
+  const A=S.actions, out=[];
+  S.combos3.forEach((c,i)=>{ if(mask[A.TAKE3+i]) out.push({idx:A.TAKE3+i, c:counts(c)}); });
+  S.combos2.forEach((c,i)=>{ if(mask[A.TAKE2+i]) out.push({idx:A.TAKE2+i, c:counts(c)}); });
+  for(let c=0;c<5;c++){ if(mask[A.TAKE1+c]) out.push({idx:A.TAKE1+c, c:counts([c])}); }
+  for(let c=0;c<5;c++){ if(mask[A.TAKE2SAME+c]) out.push({idx:A.TAKE2SAME+c, c:counts([c,c])}); }
+  return out;
+}
+function takeAction(){ const want=counts(sel);
+  const hit=legalTakes(S.mask).find(t=>eq(want,t.c)); return hit?hit.idx:null; }
+function canAdd(c){ const want=counts(sel.concat([c]));
+  return legalTakes(S.mask).some(t=>subset(want,t.c)); }
+function isMyTurn(){ return !S.over && S.human!==null && S.acting===S.human; }
+function canAct(){ return isMyTurn() && S.phase==='act'; }
+function phaseWord(){ return S.phase==='discard' ? 'discarding'
+                           : S.phase==='noble'  ? 'choosing noble' : 'acting'; }
+function agentThinking(){ return S.human!==null && S.acting!==S.human && !S.over; }
+function dots(){ const t=el('span','thinking');
+  t.appendChild(el('i'));t.appendChild(el('i'));t.appendChild(el('i')); return t; }
+function colorName(c){ return (S && S.colors && S.colors[c]) || GEMS[c].n; }
+
+function bankGem(color, n, pick){
+  const g = gemSvg('gem g'+color, color);
+  if(n!==null && n!==undefined){
+    g.appendChild(el('span','n', String(n)));
+    if(n===0) g.classList.add('empty');
+  }
+  g.title = colorName(color) + ': ' + n;
+  if(pick){
+    g.classList.add('pick');
+    if(sel.includes(color)) g.classList.add('on');
+    if(!canAdd(color) && !sel.includes(color)) g.classList.add('dim');
+    g.onclick = ()=>clickGem(color);
+  }
+  return g;
+}
+function chip(color, n, cls){
+  const c = gemSvg('chip g'+color+(cls?' '+cls:''), color);
+  if(n!==undefined && n!==null) c.appendChild(el('span','cn', String(n)));
+  return c;
+}
+function pipEl(color, n){
+  const p = gemSvg('pip g'+color, color);
+  p.appendChild(el('span','cn', String(n)));
+  return p;
+}
+function cardEl(c, tier){
+  const d = el('div','card');
+  if(!c){ d.classList.add('empty'); return d; }
+  if(c.hidden){
+    d.classList.add('back');
+    d.innerHTML = '<svg class="art" viewBox="0 0 100 138" preserveAspectRatio="none">'
+      + '<use href="#bk'+(tier===undefined?0:tier)+'"/></svg>';
+    const bk = el('div','bk','reserved'); d.appendChild(bk);
+    return d;
+  }
+  const t = (tier===undefined) ? cardTier(c) : tier;
+  d.innerHTML = cardArt(t, c.bonus, c.cost);
+  const band = el('div','band g'+c.bonus);
+  band.appendChild(useSvg('bg','gm'+c.bonus));
+  band.appendChild(el('span','pts', c.points?String(c.points):''));
+  d.appendChild(band);
+  const costs = el('div','costs');
+  c.cost.forEach((v,i)=>{ if(v>0) costs.appendChild(pipEl(i, v)); });
+  d.appendChild(costs);
+  d.title = colorName(c.bonus) + ' bonus · ' + c.points + ' pt · cost '
+    + c.cost.map((v,i)=> v? v+' '+colorName(i) : '').filter(Boolean).join(', ');
+  return d;
+}
+/* a reserved / flying card carries no tier: guess it from its cost and points */
+function cardTier(c){
+  const t = sum(c.cost);
+  if(c.points >= 4 || t >= 13) return 2;
+  if(c.points >= 1 || t >= 8) return 1;
+  return 0;
+}
+/* a plain tier back, with no caption: the deck pile and the card being dealt */
+function backEl(tier){
+  const d = el('div','card back');
+  d.innerHTML = '<svg class="art" viewBox="0 0 100 138" preserveAspectRatio="none">'
+    + '<use href="#bk'+tier+'"/></svg>';
+  return d;
+}
+function deckEl(tier, n){
+  const d = backEl(tier);
+  d.classList.add('deck');
+  d.appendChild(el('div','dcount', n + ' left'));
+  d.title = 'Tier ' + (tier+1) + ' deck — ' + n + ' cards left';
+  return d;
+}
+function nobleEl(req){
+  const d = el('div','noble');
+  d.innerHTML = '<svg class="art" viewBox="0 0 100 100"><use href="#nbl'
+    + nobleVariant(req) + '"/></svg>';
+  d.appendChild(el('div','p3','3'));
+  const r = el('div','reqs');
+  req.forEach((v,i)=>{ if(v>0) r.appendChild(pipEl(i, v)); });
+  d.appendChild(r);
+  d.title = 'Noble · 3 points · needs '
+    + req.map((v,i)=> v? v+' '+colorName(i) : '').filter(Boolean).join(', ');
+  return d;
+}
+function nobleChip(req){
+  const n = el('div','nob');
+  n.innerHTML = '<svg viewBox="0 0 100 100"><use href="#nbl'+nobleVariant(req)+'"/></svg>';
+  n.title = 'noble · 3 points';
+  return n;
+}
+
+/* ---------- seating: the human at the bottom, the rest clockwise ---------- */
+function seating(){
+  const n = S.num_players, base = (S.human===null ? 0 : S.human), order = [];
+  for(let i=0;i<n;i++) order.push((base+i)%n);
+  const spots = n===2 ? ['top'] : n===3 ? ['left','right'] : ['left','top','right'];
+  const map = {me: order[0]};
+  spots.forEach((s,i)=> map[s] = order[i+1]);
+  return map;
+}
+function seatAgent(seat){
+  if(S.human===seat) return 'you';
+  if(S.agent_names && S.agent_names[seat]) return S.agent_names[seat];
+  if(S.seats && S.seats[seat]) return specLabel(S.seats[seat]);
+  return 'agent';
+}
+function matEl(p, wide){
+  const A = S.actions, mine = p.seat===S.human;
+  const acting = p.seat===S.acting && !S.over;   /* no glow on a finished board */
+  const d = el('div','mat'+(wide?' wide':'')+(acting?' acting':'')+(mine?' you':''));
+  fx(d, 'mat:'+p.seat);
+
+  const head = el('div','msec mhead');
+  head.appendChild(el('div','av', String(p.seat)));
+  const who = el('div','mwho');
+  who.appendChild(el('div','mname','Seat '+p.seat+(mine?' (you)':'')));
+  const ag = el('div','magent');
+  ag.appendChild(el('span','bot', seatAgent(p.seat)));
+  ag.title = seatAgent(p.seat);
+  if(acting && agentThinking()) ag.appendChild(dots());
+  who.appendChild(ag);
+  head.appendChild(who);
+  const pts = el('div','mpts');
+  pts.appendChild(el('b',null,String(p.points)));
+  pts.appendChild(el('span',null,'/15'));
+  pts.title = p.points + ' of 15 points';
+  head.appendChild(pts);
+  d.appendChild(head);
+
+  const bar = el('div','mprog'); const fill = el('i');
+  fill.style.width = Math.min(100, p.points/15*100) + '%';
+  bar.appendChild(fill); d.appendChild(bar);
+
+  /* tokens */
+  const tok = el('div','msec mtok');
+  p.tokens.forEach((n,i)=>{
+    const c = chip(i, n, n?'':'z');
+    fx(c, 'tok:'+p.seat+':'+i);
+    c.title = colorName(i) + ' tokens: ' + n;
+    const a = A.DISCARD + i;
+    if(mine && isMyTurn() && S.phase==='discard' && S.mask[a]){
+      c.classList.add('pick'); c.classList.remove('z');
+      c.onclick = ()=>send(a);
+    }
+    tok.appendChild(c);
+  });
+  d.appendChild(tok);
+
+  /* purchased cards, stacked by bonus colour */
+  const bought = p.bought || [];
+  const cnt = [0,0,0,0,0], pt = [0,0,0,0,0];
+  bought.forEach(c=>{ cnt[c.bonus]++; pt[c.bonus] += c.points; });
+  const usable = p.bonuses;              /* the observation is authoritative */
+  const stacks = el('div','msec stacks');
+  for(let i=0;i<5;i++){
+    const n = usable[i];
+    const st = el('div','stk g'+i+(n?'':' z'));
+    fx(st, 'stack:'+p.seat+':'+i);
+    for(let k=Math.min(n,4); k>0; k--){
+      const s = el('i','sl'); s.style.setProperty('--i', String(k)); st.appendChild(s);
+    }
+    const face = el('div','face');
+    face.appendChild(useSvg('sg','gm'+i));
+    face.appendChild(el('b', null, String(n)));
+    st.appendChild(face);
+    if(pt[i] > 0){ const sp = el('span','sp', String(pt[i])); st.appendChild(sp); }
+    st.title = n + ' ' + colorName(i) + ' card' + (n===1?'':'s')
+      + (pt[i] ? ' · ' + pt[i] + ' points' : '');
+    stacks.appendChild(st);
+  }
+  d.appendChild(stacks);
+
+  /* reserved */
+  const res = el('div','msec mres');
+  fx(res, 'resbox:'+p.seat);
+  let anyRes = false;
+  p.reserved.forEach((c,i)=>{
+    if(!c) return;
+    anyRes = true;
+    const slot = el('div','slot');
+    fx(slot, 'res:'+p.seat+':'+i);
+    const cd = cardEl(c);
+    const a = A.BUY_RESERVED+i;
+    if(p.seat===viewSeat()) trackCursor(cd, {kind:'reserved', idx:i});
+    if(mine && canAct() && S.mask[a]){
+      cd.classList.add('clickable','buyable');
+      cd.onclick = ()=>pickCard({kind:'reserved', idx:i});
+    }
+    if(selCard && selCard.kind==='reserved' && selCard.idx===i && mine)
+      cd.classList.add('chosen');
+    slot.appendChild(cd);
+    res.appendChild(slot);
+  });
+  if(!anyRes) res.appendChild(el('span','mtag','no reserve'));
+  d.appendChild(res);
+
+  /* nobles won */
+  const nb = el('div','msec mnob');
+  fx(nb, 'nobox:'+p.seat);
+  (p.nobles || []).forEach(r=> nb.appendChild(nobleChip(r)));
+  if((p.nobles||[]).length) d.appendChild(nb);
+  return d;
+}
+
+/* ================================================================== */
+/*  KEYBOARD CURSOR over the card grid                                 */
+/*    rows: 0 = tier 3, 1 = tier 2, 2 = tier 1, 3 = my reserved cards   */
+/*    cols: 0 = the deck, 1..4 = the four face-up slots                  */
+/*          (the reserved row has three columns and no deck)             */
+/*  A cursor cell maps to the SAME {kind,...} descriptor the mouse       */
+/*  builds, so keyboard and mouse share cardActions() -> action index.   */
+/* ================================================================== */
+const CUR_ROWS = 4;
+function rowCols(row){ return row===3 ? 3 : 5; }
+function viewSeat(){ return S.human===null ? S.view : S.human; }
+function cellOf(c){                       /* descriptor -> {row,col}, or null */
+  if(!c) return null;
+  if(c.kind==='deck')     return {row: 2 - c.tier, col: 0};
+  if(c.kind==='faceup')   return {row: 2 - Math.floor(c.slot/4), col: c.slot%4 + 1};
+  if(c.kind==='reserved') return {row: 3, col: c.idx};
+  return null;
+}
+function cardAt(cell){                    /* {row,col} -> descriptor, or null */
+  if(!cell) return null;
+  if(cell.row===3) return {kind:'reserved', idx:cell.col};
+  const tier = 2 - cell.row;
+  return cell.col===0 ? {kind:'deck', tier:tier}
+                      : {kind:'faceup', slot: tier*4 + (cell.col-1)};
+}
+function cellKey(cell){ return cell ? cell.row + ':' + cell.col : ''; }
+/* every card element the cursor can land on registers here during render() */
+function trackCursor(node, desc){
+  const cell = cellOf(desc);
+  if(!cell || !node) return node;
+  cursorNodes[cellKey(cell)] = node;
+  node.onmouseenter = ()=>moveCursor(cell);      /* mouse and keyboard mix */
+  return node;
+}
+function paintCursor(){
+  const key = cellKey(cursor);
+  for(const k in cursorNodes){
+    const n = cursorNodes[k];
+    if(!n || !n.classList) continue;
+    if(k===key) n.classList.add('kfocus'); else n.classList.remove('kfocus');
+  }
+}
+/* moving the cursor never re-renders the board (so hovering cannot yank the
+   DOM out from under the pointer) -- only the ring and the action bar change */
+function moveCursor(cell){ cursor = cell; paintCursor(); renderBar(); }
+function activeCard(){ return cursor ? cardAt(cursor) : selCard; }
+/* the one place a card becomes an action index: the bar, the mouse and the
+   keyboard all go through it, so the mapping cannot diverge */
+function cardActions(c){
+  const A = S.actions;
+  if(!c) return {buy:null, res:null, label:''};
+  if(c.kind==='faceup'){
+    const gone = !S.faceup[c.slot];        /* an empty slot is visitable, not actionable */
+    return {buy: gone?null:A.BUY_FACEUP+c.slot, res: gone?null:A.RESERVE_FACEUP+c.slot,
+            label:'tier '+(Math.floor(c.slot/4)+1)+' card '+(c.slot%4+1)
+                  + (gone?' (empty)':'')};
+  }
+  if(c.kind==='deck'){
+    const gone = !S.decks[c.tier];
+    return {buy:null, res: gone?null:A.RESERVE_DECK+c.tier,
+            label:'tier '+(c.tier+1)+' deck top' + (gone?' (empty)':'')};
+  }
+  const p = S.players[viewSeat()] || S.players.find(x=>x.seat===viewSeat());
+  const held = !!(p && p.reserved && p.reserved[c.idx]);
+  return {buy: held?A.BUY_RESERVED+c.idx:null, res:null,
+          label:'reserved card '+(c.idx+1) + (held?'':' (empty)')};
+}
+function legalAction(a){ return a!==null && a!==undefined && !!(S && S.mask[a]); }
+
+function pushLog(st){
+  if(st.last && st.last !== lastLogged){
+    lastLogged = st.last;
+    const m = /^seat (\d+): (.*)$/.exec(st.last);
+    logLines.unshift(m ? {seat:+m[1], text:m[2]} : {seat:-1, text:st.last});
+    if(logLines.length > 40) logLines.length = 40;
+  }
+}
+function renderLog(){
+  const box = $('logBox'); box.innerHTML='';
+  box.hidden = !logOpen;
+  $('logToggle').textContent = (logOpen ? '▾' : '▸') + ' log';
+  if(!logOpen) return;
+  if(!logLines.length){ box.appendChild(el('span','hint','No moves yet.')); return; }
+  logLines.forEach((l,i)=>{
+    const d = el('div','logline'+(l.seat>=0?' s'+(l.seat%4):'')+(i===0?' fresh':''));
+    d.appendChild(el('span','who', l.seat>=0 ? ('S'+l.seat) : '·'));
+    d.appendChild(el('span',null, l.text));
+    box.appendChild(d);
+  });
+}
+
+function render(st){
+  const fresh = st !== S;
+  if(fresh) pushLog(st);
+  S = st;
+  const A = S.actions;
+
+  $('table').className = 'p' + S.num_players;
+  $('turn').innerHTML = 'turn <b>' + S.turn + '</b>';
+  $('mode').textContent = (S.human===null ? 'watch mode' : 'you are seat '+S.human)
+                          + (S.has_model ? ' · model' : ' · random agents');
+  const ph = $('phase');
+  ph.textContent = S.over ? 'game over'
+                 : agentThinking() ? 'seat ' + S.acting + ' thinking…'
+                                   : 'seat ' + S.acting + ' · ' + phaseWord();
+  ph.className = 'badge' + (agentThinking() && !S.over ? ' think' : '');
+  $('last').textContent = S.last || 'game start';
+  $('watchCtl').className = 'watchonly' + (S.human===null ? '' : ' off');
+  if(S.over && $('auto').checked) $('auto').checked = false;   /* auto-play stops */
+  cursorNodes = {};
+
+  /* bank */
+  const bank = $('bank'); bank.innerHTML='';
+  S.bank.forEach((n,i)=> bank.appendChild(fx(bankGem(i, n, canAct() && i<5), 'bank:'+i)));
+
+  /* nobles (5 fixed slots with holes: the slot index is the CHOOSE_NOBLE arg) */
+  const nb = $('nobles'); nb.innerHTML='';
+  let anyNoble = false;
+  S.nobles.forEach((req,slot)=>{
+    if(!req) return;
+    anyNoble = true;
+    const d = nobleEl(req);
+    fx(d, 'noble:'+slot);
+    const a = A.CHOOSE_NOBLE + slot;
+    if(isMyTurn() && S.phase==='noble' && S.mask[a]){
+      d.classList.add('clickable','buyable');
+      d.onclick = ()=>send(a);
+    }
+    nb.appendChild(d);
+  });
+  if(!anyNoble) nb.appendChild(el('span','hint','no nobles left'));
+
+  /* three tiers, deck back on the left of each row */
+  const t = $('tiers'); t.innerHTML='';
+  for(let tier=2; tier>=0; tier--){
+    const row = el('div','tier t'+(tier+1));
+    const dslot = el('div','slot deck');
+    fx(dslot, 'deck:'+tier);
+    const deck = deckEl(tier, S.decks[tier]);
+    trackCursor(deck, {kind:'deck', tier:tier});
+    const ra = A.RESERVE_DECK + tier;
+    if(canAct() && S.mask[ra]){
+      deck.classList.add('clickable','reservable');
+      deck.onclick = ()=>pickCard({kind:'deck', tier:tier});
+    }
+    if(selCard && selCard.kind==='deck' && selCard.tier===tier) deck.classList.add('chosen');
+    dslot.appendChild(deck);
+    row.appendChild(dslot);
+    for(let pos=0; pos<4; pos++){
+      const slot = tier*4+pos, c = S.faceup[slot];
+      const holder = el('div','slot');
+      fx(holder, 'slot:'+slot);
+      const d = cardEl(c, tier);
+      trackCursor(d, {kind:'faceup', slot:slot});
+      const buy = A.BUY_FACEUP+slot, res = A.RESERVE_FACEUP+slot;
+      if(canAct() && c){
+        if(S.mask[buy]) d.classList.add('buyable');
+        if(S.mask[res]) d.classList.add('reservable');
+        if(S.mask[buy] || S.mask[res]){
+          d.classList.add('clickable');
+          d.onclick = ()=>pickCard({kind:'faceup', slot:slot});
+        }
+      }
+      if(selCard && selCard.kind==='faceup' && selCard.slot===slot) d.classList.add('chosen');
+      holder.appendChild(d);
+      row.appendChild(holder);
+    }
+    t.appendChild(row);
+  }
+
+  /* mats */
+  const map = seating();
+  const byId = {me:'seatMe', top:'seatTop', left:'seatLeft', right:'seatRight'};
+  ['me','top','left','right'].forEach(spot=>{
+    const host = $(byId[spot]);
+    host.innerHTML = '';
+    const seat = map[spot];
+    if(seat===undefined || seat===null){ host.hidden = true; return; }
+    host.hidden = false;
+    const p = S.players[seat] || S.players.find(x=>x.seat===seat);
+    host.appendChild(matEl(p, spot==='me' || spot==='top'));
+  });
+
+  renderLog();
+  renderResults();
+  renderBar();
+  renderLegend();
+  paintCursor();
+  fitBoard();
+}
+
+/* The board row is `minmax(0,1fr)`: its height is whatever the header, the mats,
+   the bar and the log strip leave over.  Size the cards to that box (and to the
+   column width) so three tiers always fit without a scrollbar at any window
+   size.  Mat furniture uses --mc, so this never feeds back into the mats. */
+function fitBoard(){
+  const board = $('board'), root = document.documentElement;
+  if(!board || !root || !root.style || typeof board.getBoundingClientRect !== 'function')
+    return;
+  const r = board.getBoundingClientRect();
+  if(!r || !r.height || !r.width) return;
+  const vw = (typeof innerWidth === 'number') ? innerWidth : r.width;
+  const vh = (typeof innerHeight === 'number') ? innerHeight : r.height;
+  const g = Math.max(4, Math.min(12, vw * .0055));            /* == --gap */
+  const gem = Math.max(24, Math.min(Math.min(vw*.03, vh*.051), 56));
+  /* height: nobles row + 3 tiers + 3 gaps, assuming the noble tiles are tallest */
+  let cw = (r.height - 3*g) / (0.78 + 3*1.38);
+  if(0.78*cw < gem) cw = (r.height - gem - 3*g) / (3*1.38);   /* the bank is taller */
+  cw = Math.min(cw, (r.width - 5*g) / (0.84 + 4));            /* deck + four cards */
+  cw = Math.max(40, Math.min(cw * .985, 210));
+  root.style.setProperty('--cw', cw.toFixed(1) + 'px');
+}
+
+function renderBar(){
+  const bar = $('bar'); bar.innerHTML='';
+  barBody(bar);
+  const k = el('span','khint','1-5 gems · ←↑→↓ cards · Enter act · Esc clear · ? keys');
+  k.title = 'keyboard shortcuts (press ?)';
+  k.onclick = ()=>{ legendOpen = !legendOpen; renderLegend(); };
+  bar.appendChild(k);
+}
+function barBody(bar){
+  if(S.over){
+    bar.appendChild(el('span','mtag','game over'));
+    bar.appendChild(el('span','hint', overHeadline(S.over)
+      + ' — the final board is still on the table. Press N (or New game) to deal again.'));
+    return;
+  }
+  if(S.human===null){
+    bar.appendChild(el('span','mtag','watch'));
+    bar.appendChild(el('span','hint',
+      'Every seat is played by an agent — use Step, or turn on auto.'));
+    return;
+  }
+  if(!isMyTurn()){
+    bar.appendChild(el('span','hint','Seat '+S.acting+' is '+phaseWord()+'…'));
+    bar.appendChild(dots());
+    return;
+  }
+  const A = S.actions;
+  if(S.phase==='discard'){
+    const me = S.players.find(p=>p.seat===S.human);
+    bar.appendChild(el('span','mtag','discard'));
+    bar.appendChild(el('span','hint','You have '+sum(me.tokens)
+      + ' tokens, return down to 10: click one of your tokens.'));
+    return;
+  }
+  if(S.phase==='noble'){
+    bar.appendChild(el('span','mtag','noble'));
+    bar.appendChild(el('span','hint','Choose a noble — click a highlighted tile.'));
+    return;
+  }
+  bar.appendChild(el('span','mtag','your move'));
+  if(sel.length){
+    const chips = el('div','msec');
+    sel.forEach(c=>chips.appendChild(chip(c)));
+    bar.appendChild(chips);
+    const a = takeAction();
+    if(note) bar.appendChild(el('span','hint', note));
+    const b = el('button', a===null?'':'primary', a===null ? 'not a legal take' : 'Take');
+    b.disabled = a===null; b.onclick = ()=>send(a);
+    bar.appendChild(b);
+    const clr = el('button','ghost','Clear'); clr.onclick=()=>{sel=[];render(S)};
+    bar.appendChild(clr);
+  } else if(activeCard()){
+    /* the bar follows the card under the mouse OR under the keyboard cursor */
+    const act = cardActions(activeCard());
+    const buy = act.buy, res = act.res;
+    bar.appendChild(el('span','hint', act.label));
+    if(buy!==null){ const b=el('button','primary','Buy'); b.disabled=!S.mask[buy];
+      b.onclick=()=>send(buy); bar.appendChild(b); }
+    if(res!==null){ const b=el('button',null,'Reserve'); b.disabled=!S.mask[res];
+      b.onclick=()=>send(res); bar.appendChild(b); }
+    const clr = el('button','ghost','Cancel');
+    clr.onclick=()=>{selCard=null; cursor=null; render(S)};
+    bar.appendChild(clr);
+  } else {
+    bar.appendChild(el('span','hint','Click gems to take, or a card to buy / reserve. '
+      + 'Green glow = affordable, blue edge = reservable.'));
+  }
+  if(S.mask[A.PASS]){
+    const only = S.mask.reduce((n,v)=>n+v,0)===1;
+    const b = el('button', only?'primary':'', 'Pass');
+    b.disabled = !only; b.onclick=()=>send(A.PASS);
+    bar.appendChild(b);
+  }
+}
+
+/* ================================================================== */
+/*  RESULTS DOCK                                                       */
+/*  The finished board stays on the table: this panel sits in the grid  */
+/*  above the action bar, so every card, mat and token stays visible.   */
+/* ================================================================== */
+function overHeadline(o){
+  if(!o) return '';
+  const w = o.winners || [];
+  if(o.draw) return w.length ? 'Draw — seats ' + w.join(' & ') : 'Draw';
+  if(!w.length) return 'Game over';
+  return 'Seat ' + w[0] + ' wins' + (w[0]===S.human ? ' (you)' : '');
+}
+function overEndedBy(o){
+  const pts = o.points || [];
+  const by = o.ended_by || (pts.length && Math.max.apply(null, pts) >= 15
+                            ? 'points' : 'turn_limit');
+  return by === 'turn_limit' ? 'turn limit reached' : 'ended by reaching 15';
+}
+/* per-seat final tallies, from the payload with the board as the fallback */
+function overRows(o){
+  const rows = [];
+  for(let s=0; s<S.num_players; s++){
+    const p = S.players[s] || S.players.find(x=>x.seat===s) || {};
+    rows.push({
+      seat: s,
+      points: (o.points && o.points[s] !== undefined) ? o.points[s] : (p.points||0),
+      cards: (o.cards && o.cards[s] !== undefined) ? o.cards[s] : sum(p.bonuses||[0]),
+      nobles: (o.nobles && o.nobles[s] !== undefined) ? o.nobles[s]
+              : ((p.nobles||[]).length),
+      tokens: sum(p.tokens || [0]),
+      win: (o.winners || []).indexOf(s) >= 0
+    });
+  }
+  /* Splendor's own tie-break: most points, then fewest development cards */
+  const order = rows.slice().sort((a,b)=> (b.points-a.points) || (a.cards-b.cards));
+  let rank = 0, prev = null;
+  order.forEach((r,i)=>{
+    if(!prev || prev.points!==r.points || prev.cards!==r.cards) rank = i+1;
+    r.rank = rank; prev = r;
+  });
+  return order;
+}
+function renderResults(){
+  const host = $('results');
+  host.innerHTML = '';
+  if(!S.over){ host.hidden = true; return; }
+  host.hidden = false;
+  const o = S.over;
+  if(resultsHidden){
+    const slim = el('div','over-slim');
+    slim.appendChild(el('span','over-crown','♛'));
+    slim.appendChild(el('span','over-who', overHeadline(o)));
+    const show = el('button',null,'Show results');
+    show.onclick = ()=>{ resultsHidden = false; render(S); };
+    slim.appendChild(show);
+    const ng = el('button','primary','New game');
+    ng.onclick = ()=>newGame();
+    slim.appendChild(ng);
+    host.appendChild(slim);
+    return;
+  }
+  const card = el('div','over-card');
+  const head = el('div','over-head');
+  head.appendChild(el('span','over-crown','♛'));
+  const who = el('div');
+  who.appendChild(el('div','over-who', overHeadline(o)));
+  who.appendChild(el('div','over-sub',
+    overEndedBy(o) + ' · ' + (o.turns|0) + ' turns'));
+  head.appendChild(who);
+  card.appendChild(head);
+
+  const wrap = el('div','over-wrap');
+  const t = el('table','rtable'), body = el('tbody');
+  const hr = el('tr','rh');
+  [['#',''],['seat','l'],['agent','l'],['pts',''],['cards',''],['nobles',''],['tokens','']]
+    .forEach(h=>{ const th = el('th', h[1], h[0]); hr.appendChild(th); });
+  body.appendChild(hr);
+  overRows(o).forEach(r=>{
+    const tr = el('tr', r.win ? 'win' : '');
+    tr.appendChild(el('td','rk', String(r.rank)));
+    tr.appendChild(el('td','l', 'Seat '+r.seat+(r.seat===S.human?' (you)':'')));
+    tr.appendChild(el('td','l', seatAgent(r.seat)));
+    tr.appendChild(el('td','num', String(r.points)));
+    tr.appendChild(el('td','num', String(r.cards)));
+    tr.appendChild(el('td','num', String(r.nobles)));
+    tr.appendChild(el('td','num', String(r.tokens)));
+    body.appendChild(tr);
+  });
+  t.appendChild(body);
+  wrap.appendChild(t);
+  card.appendChild(wrap);
+
+  const foot = el('div','over-foot');
+  const ng = el('button','primary','New game');
+  ng.onclick = ()=>newGame();
+  foot.appendChild(ng);
+  const hide = el('button','ghost','Hide results');
+  hide.onclick = ()=>{ resultsHidden = true; render(S); };
+  foot.appendChild(hide);
+  card.appendChild(foot);
+  host.appendChild(card);
+}
+
+/* ---------- the key legend (toggled with ?) ---------- */
+const KEYS = [
+  ['1-5', 'take that gem (twice = two of a colour) · return it while discarding · pick a noble'],
+  ['6', 'return a gold token (discard phase)'],
+  ['← ↑ → ↓', 'move the card cursor: tier 3 / 2 / 1, then your reserved cards'],
+  ['Enter', 'take the selected gems, or buy the focused card (reserve if it cannot be bought)'],
+  ['B / R', 'buy / reserve the focused card (deck column reserves the top card)'],
+  ['Esc', 'clear the gems, the card selection and the cursor'],
+  ['P', 'pass (only when passing is the sole legal move)'],
+  ['N', 'new game'],
+  ['Space', 'step (watch mode)'],
+  ['T', 'open the Table picker'],
+  ['?', 'show / hide this list']
+];
+function renderLegend(){
+  const box = $('legend');
+  box.innerHTML = '';
+  box.hidden = !legendOpen;
+  if(!legendOpen) return;
+  box.appendChild(el('h4',null,'Keyboard'));
+  KEYS.forEach(k=>{
+    const r = el('div','krow');
+    r.appendChild(el('span','kk', k[0]));
+    r.appendChild(el('span',null, k[1]));
+    box.appendChild(r);
+  });
+}
+
+/* ================================================================== */
+/*  ANIMATION                                                         */
+/*  The new state is always rendered first; everything below is a      */
+/*  throwaway clone flying over the top of it in the #fx layer, so an  */
+/*  interrupted animation can never leave the board inconsistent.      */
+/* ================================================================== */
+function rectOf(node){
+  if(!node || typeof node.getBoundingClientRect !== 'function') return null;
+  const r = node.getBoundingClientRect();
+  if(!r || !r.width || !r.height) return null;
+  return {x:r.left, y:r.top, w:r.width, h:r.height};
+}
+function snapRects(){
+  const m = {};
+  if(typeof document.querySelectorAll !== 'function') return m;
+  const all = document.querySelectorAll('[data-fx]');
+  for(let i=0;i<all.length;i++){
+    const r = rectOf(all[i]);
+    if(r) m[all[i].getAttribute('data-fx')] = r;
+  }
+  return m;
+}
+function drop(node){ if(node && typeof node.remove === 'function') node.remove(); }
+function wait(ms){ return new Promise(r=> setTimeout(r, ms)); }
+
+function fly(node, from, to, o){
+  o = o || {};
+  const layer = $('fx');
+  if(REDUCE || !node || !from || !to || !layer || typeof layer.appendChild !== 'function')
+    return Promise.resolve();
+  if(node.style){
+    node.style.position = 'fixed';
+    node.style.left = from.x + 'px'; node.style.top = from.y + 'px';
+    node.style.width = from.w + 'px'; node.style.height = from.h + 'px';
+    node.style.margin = '0'; node.style.pointerEvents = 'none';
+  }
+  layer.appendChild(node);
+  if(typeof node.animate !== 'function'){ drop(node); return Promise.resolve(); }
+  const dx = (to.x + to.w/2) - (from.x + from.w/2);
+  const dy = (to.y + to.h/2) - (from.y + from.h/2);
+  const sc = Math.max(.25, Math.min(1.25, (o.scaleTo || to.w) / (from.w || 1)));
+  const lift = o.lift===undefined ? -Math.min(60, Math.abs(dx)*.18 + 22) : o.lift;
+  const mid = {transform:'translate('+(dx*.5).toFixed(1)+'px,'+(dy*.5+lift).toFixed(1)
+      + 'px) scale('+((1+sc)/2*1.08).toFixed(3)+') rotate('+(o.spin||0)/2+'deg)',
+    opacity:1, offset:.55};
+  let a;
+  try{
+    a = node.animate([
+      {transform:'translate(0,0) scale(1) rotate(0deg)', opacity: o.fadeIn ? 0 : 1},
+      mid,
+      {transform:'translate('+dx.toFixed(1)+'px,'+dy.toFixed(1)+'px) scale('+sc.toFixed(3)
+        + ') rotate('+(o.spin||0)+'deg)', opacity: o.keep ? 1 : .05}
+    ], {duration:o.d||560, delay:o.delay||0, fill:'forwards',
+        easing:'cubic-bezier(.34,.72,.3,1)'});
+  }catch(e){ drop(node); return Promise.resolve(); }
+  /* A throttled view (another tab, an occluded window) may never settle
+     `finished`; always race it against the wall clock so the queue -- and with
+     it the poll loop -- can never wedge. */
+  const budget = (o.d||560) + (o.delay||0) + 300;
+  const done = Promise.race([
+    Promise.resolve(a.finished).catch(()=>{}),
+    new Promise(r=> setTimeout(r, budget))
+  ]);
+  return done.then(()=>{ drop(node); }, ()=>{ drop(node); });
+}
+
+function flyChip(color, from, to, o){
+  const c = chip(color, undefined, 'flyc');
+  if(c.style){ c.style.setProperty('--csz', ((from && from.w) || 26) + 'px'); }
+  return fly(c, from, to, o);
+}
+function flyCard(card, tier, from, to, o){
+  const holder = el('div','slot flyc');
+  const cd = cardEl(card, tier);
+  if(cd.style) cd.style.position = 'absolute';
+  holder.appendChild(cd);
+  return fly(holder, from, to, o);
+}
+function flyNobleTile(req, from, to, o){
+  const n = nobleEl(req || [0,0,0,0,0]);
+  n.classList.add('flyc');
+  return fly(n, from, to, o);
+}
+function bump(seat){
+  const m = q('mat:'+seat);
+  if(!m || !m.classList) return Promise.resolve();
+  m.classList.add('bump');
+  return wait(380).then(()=>{ if(m.classList) m.classList.remove('bump'); });
+}
+
+/* the replacement card flips in: a back slides from the deck, then the face turns up */
+function revealSlot(slot, B, A, k){
+  const tier = Math.floor(slot/4);
+  const to = A['slot:'+slot], from = B['deck:'+tier] || A['deck:'+tier] || to;
+  const node = q('slot:'+slot);
+  const tag = ()=> {
+    if(!node || typeof node.appendChild !== 'function') return;
+    if(node.classList) node.classList.add('fresh');
+    const t = el('div','newtag','NEW');
+    node.appendChild(t);
+    setTimeout(()=>{ if(t.classList) t.classList.add('out'); }, 1500);
+    setTimeout(()=>{ drop(t); if(node.classList) node.classList.remove('fresh'); }, 2100);
+  };
+  if(REDUCE || !to){ tag(); return Promise.resolve(); }
+  const half = 260*k;
+  const back = el('div','slot flyc');
+  const bc = backEl(tier);                 /* the card being dealt, not a reserve */
+  if(bc.style) bc.style.position='absolute';
+  back.appendChild(bc);
+  /* half 1: the back slides out of the deck and turns edge-on */
+  const p1 = fly(back, from, to, {d:half, spin:0, lift:-14, keep:true, scaleTo:to.w});
+  return p1.then(()=>{
+    /* half 2: the real card, already rendered underneath, completes the turn */
+    if(node && typeof node.animate === 'function'){
+      try{
+        node.animate([
+          {transform:'perspective(700px) rotateY(-88deg)', opacity:.35},
+          {transform:'perspective(700px) rotateY(0deg)', opacity:1}
+        ], {duration:half, easing:'cubic-bezier(.3,.8,.35,1)'});
+      }catch(e){}
+    }
+    tag();
+    return wait(half);
+  });
+}
+
+function playEvent(e, B, A, k){
+  const seat = e.seat, mat = A['mat:'+seat] || B['mat:'+seat];
+  const jobs = [];
+  if(e.type === 'take' || e.type === 'take2'){
+    (e.gems||[]).forEach((c,i)=>{
+      const to = A['tok:'+seat+':'+c] || mat;
+      jobs.push(flyChip(c, B['bank:'+c] || A['bank:'+c], to,
+                        {d:500*k, delay:i*110*k, spin:180}));
+    });
+  } else if(e.type === 'discard'){
+    jobs.push(flyChip(e.color, B['tok:'+seat+':'+e.color] || mat,
+                      A['bank:'+e.color], {d:460*k, spin:-140}));
+  } else if(e.type === 'buy'){
+    const src = e.from.kind === 'faceup' ? 'slot:'+e.from.slot
+                                         : 'res:'+seat+':'+e.from.idx;
+    const dst = (e.card && A['stack:'+seat+':'+e.card.bonus]) || mat;
+    const tier = e.from.kind === 'faceup' ? Math.floor(e.from.slot/4) : undefined;
+    jobs.push(flyCard(e.card, tier, B[src] || mat, dst, {d:620*k, spin:6}));
+    (e.paid||[]).forEach((n,c)=>{
+      for(let i=0;i<n;i++)
+        jobs.push(flyChip(c, B['tok:'+seat+':'+c] || mat, A['bank:'+c],
+                          {d:480*k, delay:(40*c + 70*i)*k, spin:-150}));
+    });
+    if(e.from.kind === 'faceup') jobs.push(revealSlot(e.from.slot, B, A, k));
+    if(e.noble) jobs.push(flyNobleTile(e.noble.req, B['noble:'+e.noble.slot],
+                                       A['nobox:'+seat] || mat, {d:640*k, delay:220*k}));
+  } else if(e.type === 'reserve'){
+    const deck = e.from.kind === 'deck';
+    const tier = deck ? e.from.tier : Math.floor(e.from.slot/4);
+    const src = deck ? 'deck:'+tier : 'slot:'+e.from.slot;
+    const dst = A['res:'+seat+':'+e.to_slot] || A['resbox:'+seat] || mat;
+    /* a deck reserve the viewer may not see flies as a face-down back */
+    jobs.push(flyCard(e.card || {hidden:true}, tier, B[src] || mat, dst, {d:620*k, spin:-6}));
+    if(e.gold) jobs.push(flyChip(5, B['bank:5'] || A['bank:5'],
+                                 A['tok:'+seat+':5'] || mat, {d:500*k, delay:150*k, spin:180}));
+    if(!deck) jobs.push(revealSlot(e.from.slot, B, A, k));
+  } else if(e.type === 'noble'){
+    jobs.push(flyNobleTile(e.req, B['noble:'+e.slot], A['nobox:'+seat] || mat, {d:640*k}));
+  } else {
+    jobs.push(bump(seat));
+  }
+  return Promise.all(jobs);
+}
+
+function queueEvents(before){
+  const evs = (S.events || []).filter(e => e.id > lastEventId);
+  if(!evs.length) return;
+  lastEventId = evs[evs.length-1].id;
+  /* the winning move animates too: the env now HOLDS the finished board, so the
+     clones land on the same table the results panel describes */
+  if(REDUCE) return;
+  const after = snapRects();
+  const k = evs.length > 3 ? .5 : evs.length > 1 ? .72 : 1;
+  animating++; animSince = Date.now();
+  animQ = animQ.then(()=>{
+    let chain = Promise.resolve();
+    evs.forEach(e=>{
+      chain = chain.then(()=> playEvent(e, before, after, k))
+                   .then(()=> wait(60*k), err=>{ console.warn(err); });
+    });
+    return chain;
+  }).then(()=>{ animating--; }, ()=>{ animating--; });
+  return animQ;
+}
+
+/* the one entry point that both renders a new state and animates into it */
+function apply(st){
+  const before = snapRects();
+  render(st);
+  queueEvents(before);
+}
+
+/* ================================================================== */
+/*  TABLE PICKER (unchanged contract)                                  */
+/* ================================================================== */
+function fmtSteps(n){
+  if(n>=1e6) return (n/1e6).toFixed(n>=1e8?0:1)+'M';
+  if(n>=1e3) return Math.round(n/1e3)+'k';
+  return String(n);
+}
+function ckLabel(c){
+  const m = /step_0*(\d+)\.pt$/.exec(c.label);
+  return m ? c.label + '  ·  ' + fmtSteps(+m[1]) + ' steps' : c.label;
+}
+function isBot(sp){ return sp==='random' || sp==='greedy'; }
+function specParse(spec){
+  if(!spec) return {spec:'random', search:false, sims:64};
+  if(spec.indexOf('mcts:')!==0) return {spec:spec, search:false, sims:64};
+  const rest = spec.slice(5), m = /^(.*):(\d+)$/.exec(rest);
+  return m ? {spec:m[1], search:true, sims:+m[2]} : {spec:rest, search:true, sims:64};
+}
+function specJoin(s){
+  if(isBot(s.spec) || !s.search) return s.spec;
+  return 'mcts:' + s.spec + ':' + Math.max(1, Math.min(100000, s.sims|0));
+}
+function specLabel(spec){
+  const p = specParse(spec);
+  if(isBot(p.spec)) return p.spec;
+  const ck = OPT && OPT.checkpoints.filter(c=>c.path===p.spec)[0];
+  const name = ck ? ck.label : p.spec.split('/').pop();
+  return p.search ? name + ' · MCTS ' + p.sims : name;
+}
+function validSpec(sp, P){
+  if(isBot(sp)) return true;
+  return !!(OPT && OPT.checkpoints.some(c=>c.path===sp && c.num_players===P));
+}
+function cfgFromServer(){
+  const cur = (OPT && OPT.current) || {num_players:(S?S.num_players:2),
+    human:(S?S.human:0), seats:(S&&S.seats)||[], sample:!!(S&&S.sample)};
+  const out = {num_players:cur.num_players, human:cur.human, sample:!!cur.sample, seats:[]};
+  for(let i=0;i<out.num_players;i++) out.seats.push(specParse(cur.seats[i]));
+  return out;
+}
+function fixSeats(){
+  const P = CFG.num_players;
+  while(CFG.seats.length < P) CFG.seats.push({spec:'random', search:false, sims:64});
+  CFG.seats.length = P;
+  if(CFG.human!==null && CFG.human>=P) CFG.human = P-1;
+  CFG.seats.forEach(s=>{ if(!validSpec(s.spec,P)){ s.spec='random'; s.search=false; } });
+}
+function seatRow(i){
+  const s = CFG.seats[i], mine = CFG.human===i;
+  const row = el('div','seatrow'+(mine?' me':''));
+  const who = el('div','seat');
+  who.appendChild(el('div','av', String(i)));
+  who.appendChild(el('span',null, mine ? 'you' : 'seat '+i));
+  row.appendChild(who);
+  if(mine){ row.appendChild(el('span','hint','you play this seat')); return row; }
+  const dd = el('select');
+  OPT.bots.forEach(b=>{ const o=el('option'); o.value=b; o.textContent=b;
+    if(s.spec===b) o.selected=true; dd.appendChild(o); });
+  OPT.checkpoints.filter(c=>c.num_players===CFG.num_players).forEach(c=>{
+    const o=el('option'); o.value=c.path; o.textContent=ckLabel(c);
+    if(s.spec===c.path) o.selected=true; dd.appendChild(o); });
+  dd.value = s.spec;
+  dd.title = s.spec;
+  dd.onchange = ()=>{ s.spec = dd.value; if(isBot(s.spec)) s.search=false;
+                      cfgErr=''; renderSetup(); };
+  row.appendChild(dd);
+  const ck = !isBot(s.spec);
+  const lab = el('label','switch'); lab.title = 'play this seat with MCTS search';
+  const cb = el('input'); cb.type='checkbox'; cb.checked = ck && s.search; cb.disabled = !ck;
+  cb.onchange = ()=>{ s.search = !!cb.checked; cfgErr=''; renderSetup(); };
+  lab.appendChild(cb); lab.appendChild(el('span',null,'search'));
+  row.appendChild(lab);
+  const box = el('div','simbox');
+  const num = el('input'); num.type='number'; num.min='1'; num.max='4000'; num.step='16';
+  num.value = String(s.sims); num.disabled = !(ck && s.search);
+  num.oninput = ()=>{ s.sims = Math.max(1, Math.min(100000, parseInt(num.value,10)||64)); };
+  box.appendChild(num); box.appendChild(el('span',null,'sims'));
+  row.appendChild(box);
+  return row;
+}
+function renderSetup(){
+  const b = $('setupBody'); b.innerHTML='';
+  $('setupErr').textContent = cfgErr;
+  $('dealBtn').disabled = cfgBusy || !OPT;
+  $('setupNote').textContent = cfgBusy ? 'dealing…' : '';
+  if(!OPT || !CFG){ b.appendChild(el('span','hint','Loading agents…')); return; }
+
+  let r = el('div','frow'); r.appendChild(el('span','flab','players'));
+  const seg = el('div','seg');
+  [2,3,4].forEach(n=>{
+    const btn = el('button', n===CFG.num_players?'on':'', String(n));
+    btn.onclick = ()=>{ CFG.num_players=n; fixSeats(); cfgErr=''; renderSetup(); };
+    seg.appendChild(btn);
+  });
+  r.appendChild(seg); b.appendChild(r);
+
+  r = el('div','frow'); r.appendChild(el('span','flab','your seat'));
+  const mine = el('div','seg');
+  const w = el('button', CFG.human===null?'on':'', 'watch');
+  w.onclick = ()=>{ CFG.human=null; fixSeats(); cfgErr=''; renderSetup(); };
+  mine.appendChild(w);
+  for(let i=0;i<CFG.num_players;i++){
+    const btn = el('button', CFG.human===i?'on':'', 'seat '+i);
+    btn.onclick = ()=>{ CFG.human=i; fixSeats(); cfgErr=''; renderSetup(); };
+    mine.appendChild(btn);
+  }
+  r.appendChild(mine); b.appendChild(r);
+
+  const seats = el('div');
+  for(let i=0;i<CFG.num_players;i++) seats.appendChild(seatRow(i));
+  b.appendChild(seats);
+
+  r = el('div','frow'); r.appendChild(el('span','flab','moves'));
+  const lab = el('label','badge switch');
+  const cb = el('input'); cb.type='checkbox'; cb.checked = !!CFG.sample;
+  cb.onchange = ()=>{ CFG.sample = !!cb.checked; };
+  lab.appendChild(cb); lab.appendChild(el('span',null,'sample moves'));
+  r.appendChild(lab);
+  r.appendChild(el('span','hint','policy seats sample instead of playing the argmax'));
+  b.appendChild(r);
+}
+async function loadOptions(){
+  try{
+    const r = await fetch('/options');
+    OPT = await r.json();
+  }catch(e){ cfgErr = 'could not reach /options — restart the GUI server'; }
+}
+async function openSetup(){
+  $('setup').hidden = false;
+  cfgErr = '';
+  if(OPT){ CFG = cfgFromServer(); fixSeats(); }
+  renderSetup();
+  await loadOptions();
+  CFG = cfgFromServer(); fixSeats();
+  renderSetup();
+}
+function closeSetup(){ $('setup').hidden = true; }
+
+async function dealTable(){
+  if(cfgBusy || !CFG) return;
+  const body = {num_players: CFG.num_players, human: CFG.human, sample: !!CFG.sample,
+    seats: CFG.seats.map((s,i)=> i===CFG.human ? null : specJoin(s))};
+  cfgBusy = true; busy = true; cfgErr = ''; renderSetup();
+  try{
+    const r = await fetch('/config', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const j = await r.json();
+    if(!j || j.error){ cfgErr = (j && j.error) || 'the table was refused'; return; }
+    if(OPT) OPT.current = {num_players:body.num_players, human:body.human,
+                           seats:body.seats, sample:body.sample};
+    logLines=[]; lastLogged=null; sel=[]; selCard=null; cursor=null;
+    resultsHidden=false; lastEventId = (j.event_id|0);
+    closeSetup();
+    render(j);
+  }catch(e){ cfgErr = String(e && e.message || e); }
+  finally{ cfgBusy = false; busy = false; renderSetup(); }
+}
+
+/* ================================================================== */
+/*  INTERACTION                                                        */
+/* ================================================================== */
+function clickGem(c){
+  selCard = null; note = '';
+  const i = sel.indexOf(c);
+  if(sel.length===1 && sel[0]===c){                    /* second click = take 2 same */
+    if(canAdd(c)) sel = [c,c];
+    else note = 'Taking 2 ' + colorName(c) + ' needs at least 4 in the bank (there are '
+                + S.bank[c] + '). Click again to deselect.';
+    if(!canAdd(c) && sel._warned===c){ sel = []; note=''; }
+    else if(!canAdd(c)) sel._warned = c;
+  }
+  else if(i>=0) sel.splice(i,1);
+  else if(sel.length<3 && canAdd(c)) sel.push(c);
+  else if(sel.length<3) note = 'Cannot add ' + colorName(c) + ' to this take.';
+  render(S);
+}
+function pickCard(c){ sel=[]; selCard=c; cursor = cellOf(c) || cursor; render(S); }
+function newGame(){
+  logLines=[]; lastLogged=null; lastEventId=-1;
+  sel=[]; selCard=null; cursor=null; note=''; resultsHidden=false;
+  post('/reset');
+}
+/* Escape: drop every transient selection, and close whatever is open */
+function escapeAll(){
+  if(legendOpen){ legendOpen = false; renderLegend(); }
+  if(!$('setup').hidden) closeSetup();
+  if(S && S.over && !resultsHidden) resultsHidden = true;
+  sel = []; selCard = null; cursor = null; note = '';
+  if(S) render(S);
+}
+
+async function post(path, body){
+  if(busy) return; busy = true;
+  try{
+    const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'},
+                                body: JSON.stringify(body||{})});
+    const j = await r.json();
+    if(j.error){ console.warn(j.error); return; }
+    sel=[]; selCard=null; note=''; apply(j);
+  } finally { busy = false; }
+}
+function send(a){ if(a===null || !S.mask[a]) return; post('/act', {action:a}); }
+
+/* ================================================================== */
+/*  KEYBOARD                                                           */
+/*  Every key goes through the same helpers the mouse uses (clickGem,   */
+/*  cardActions, send), so a key can never fire an action the mask      */
+/*  forbids -- send() drops anything the mask does not allow.           */
+/* ================================================================== */
+function typingSomewhere(){
+  const a = document.activeElement;
+  if(!a || !a.tagName) return false;
+  const t = String(a.tagName).toUpperCase();
+  return t==='INPUT' || t==='SELECT' || t==='TEXTAREA' || a.isContentEditable===true;
+}
+function stop(e){ if(e && typeof e.preventDefault === 'function') e.preventDefault(); }
+function keyCard(which){                       /* B / R / Enter on a card */
+  const c = activeCard();
+  if(!c) return false;
+  const a = cardActions(c);
+  const order = which==='buy' ? [a.buy] : which==='res' ? [a.res] : [a.buy, a.res];
+  for(let i=0;i<order.length;i++) if(legalAction(order[i])){ send(order[i]); return true; }
+  return false;
+}
+function moveCursorBy(dx, dy){
+  if(!cursor){ moveCursor({row:2, col:1}); return; }   /* home: tier 1, first card */
+  let row = cursor.row, col = cursor.col;
+  if(dx){ const n = rowCols(row); col = (col + dx + n) % n; }
+  if(dy){ row = (row + dy + CUR_ROWS) % CUR_ROWS; col = Math.min(col, rowCols(row)-1); }
+  moveCursor({row:row, col:col});
+}
+function onKey(e){
+  if(!e) return;
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key;
+  if(k==='Escape'){ stop(e); escapeAll(); return; }
+  if(typingSomewhere()) return;
+  if(!$('setup').hidden) return;              /* the picker owns the keyboard */
+  if(k==='?'){ stop(e); legendOpen = !legendOpen; renderLegend(); return; }
+  if(!S) return;
+  const low = (typeof k==='string' && k.length===1) ? k.toLowerCase() : k;
+  const A = S.actions;
+  if(low==='n'){ stop(e); newGame(); return; }
+  if(low==='t'){ stop(e); openSetup(); return; }
+  if(k===' ' || k==='Spacebar'){
+    stop(e);
+    if(S.human===null && !S.over && !busy) post('/step');
+    return;
+  }
+  if(k==='ArrowLeft' || k==='ArrowRight'){ stop(e); moveCursorBy(k==='ArrowRight'?1:-1,0); return; }
+  if(k==='ArrowUp'   || k==='ArrowDown' ){ stop(e); moveCursorBy(0, k==='ArrowDown'?1:-1); return; }
+  if(S.over) return;                          /* nothing on the board is actionable */
+  if(k>='1' && k<='6'){
+    stop(e);
+    const i = (+k) - 1;
+    if(!isMyTurn()) return;
+    if(S.phase==='discard'){ send(A.DISCARD + i); return; }
+    if(S.phase==='noble'){ if(i<5) send(A.CHOOSE_NOBLE + i); return; }
+    if(i<5) clickGem(i);                      /* gold is never takeable */
+    return;
+  }
+  if(k==='Enter'){
+    stop(e);
+    if(sel.length){ const a = takeAction(); if(legalAction(a)) send(a); return; }
+    keyCard('any');
+    return;
+  }
+  if(low==='b'){ stop(e); keyCard('buy'); return; }
+  if(low==='r'){ stop(e); keyCard('res'); return; }
+  if(low==='p'){
+    stop(e);
+    if(S.mask[A.PASS] && S.mask.reduce((n,v)=>n+v,0)===1) send(A.PASS);
+    return;
+  }
+}
+
+$('tableBtn').onclick = ()=>openSetup();
+$('setupClose').onclick = ()=>closeSetup();
+$('dealBtn').onclick = ()=>dealTable();
+$('setup').onclick = (e)=>{ if(e && e.target===$('setup')) closeSetup(); };
+document.onkeydown = onKey;
+$('stepBtn').onclick = ()=>post('/step');
+$('resetBtn').onclick = ()=>newGame();
+$('speed').oninput = ()=> $('speedLbl').textContent = $('speed').value + ' ms';
+$('logToggle').onclick = ()=>{ logOpen = !logOpen; renderLog(); fitBoard(); };
+if(typeof addEventListener === 'function') addEventListener('resize', fitBoard);
+
+/* ---------- the poll loop waits for the animations to finish ---------- */
+let timer = null;
+function tick(){
+  /* a finished game never polls: the held board is the whole point */
+  if(S && S.over && $('auto').checked) $('auto').checked = false;
+  const on = $('auto').checked;
+  const need = S && !S.over && (S.human===null ? on : S.acting!==S.human);
+  if(animating > 0 && Date.now()-animSince > 8000){   /* watchdog */
+    animating = 0; animQ = Promise.resolve();
+  }
+  if(need && !busy && animating===0) post('/step');
+  timer = setTimeout(tick, Math.max(60, +$('speed').value));
+}
+(async function(){
+  buildDefs();
+  const st = await (await fetch('/state')).json();
+  lastEventId = st.event_id | 0;            /* never replay the backlog on a reload */
+  render(st);
+  loadOptions();
+  tick();
+})();
+</script>
+</body>
+</html>
