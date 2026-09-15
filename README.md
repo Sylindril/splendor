@@ -201,7 +201,10 @@ grid (tier 3 / 2 / 1, then your reserved cards, with the deck in column 0),
 cannot be bought), `B` / `R` buy / reserve, `Esc` clears the selection and the
 cursor, `P` passes when passing is the only legal move, `N` deals a new game,
 `Space` steps in watch mode, `T` opens the table picker and `?` shows the key
-list. A key never fires an action the legal mask forbids.
+list. A key never fires an action the legal mask forbids. The keys are also
+drawn on the board while they work: a number on each bank gem (or on your
+tokens while discarding, and on the noble tiles while choosing), `Enter` /
+`B` / `R` caps under the focused card, and the shortcut inside each button.
 
 The game ends at the end of the round in which someone reaches 15 points (or
 at the turn limit). The finished board is **held**: every card, token, mat and

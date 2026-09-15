@@ -419,6 +419,27 @@ input[type=range]{width:88px;accent-color:var(--gold);vertical-align:middle;curs
 .over-slim .over-who{font-size:14px}
 
 /* ============================== key legend ============================== */
+/* keycaps drawn ON the board: the number on a bank gem is the key that takes
+   it, the caps under the focused card are the keys that act on it, and the
+   small cap inside a button is its shortcut. Only shown while they work. */
+.key{position:absolute;z-index:7;pointer-events:none;display:inline-flex;
+  align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;
+  border-radius:5px;font:800 10.5px/1 var(--sans);color:#1e1503;letter-spacing:.3px;
+  background:linear-gradient(180deg,#fff7dc,#e9c766);border:1px solid rgba(0,0,0,.4);
+  box-shadow:0 1px 0 rgba(0,0,0,.55),0 2px 7px rgba(0,0,0,.5)}
+.gem .key{top:-7px;left:-7px}
+.gem.dim .key{opacity:.35}
+.chip .key{top:-8px;left:-8px;transform:scale(.8);transform-origin:bottom right}
+.noble .key{top:6%;right:6%}
+.keys{position:absolute;z-index:7;left:50%;bottom:-10px;transform:translateX(-50%);
+  display:flex;gap:3px;pointer-events:none;white-space:nowrap}
+.keys .key{position:static}
+.keys.home .key{background:linear-gradient(180deg,#e8eef5,#b9c4d2)}
+.kb{display:inline-block;margin-left:7px;padding:1px 4px;border-radius:4px;vertical-align:1px;
+  font:700 9px/1.3 var(--sans);letter-spacing:.4px;
+  background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.28);opacity:.85}
+button.primary .kb{background:rgba(0,0,0,.14);border-color:rgba(0,0,0,.3)}
+button:disabled .kb{opacity:.5}
 .khint{font-size:10px;color:var(--muted);white-space:nowrap;cursor:pointer;opacity:.8}
 .khint:hover{opacity:1}
 #legend{position:fixed;z-index:98;right:14px;bottom:14px;padding:11px 14px 12px;
@@ -507,14 +528,14 @@ select option{background:#132119;color:var(--ink)}
   <span class="badge" id="mode">-</span>
   <span class="spacer"></span>
   <div class="controls">
-    <button id="tableBtn" class="ghost">Table</button>
+    <button id="tableBtn" class="ghost">Table<span class="kb">T</span></button>
     <span class="watchonly" id="watchCtl">
-      <button id="stepBtn" class="ghost">Step</button>
+      <button id="stepBtn" class="ghost">Step<span class="kb">Space</span></button>
       <label class="badge switch"><input type="checkbox" id="auto"> auto</label>
       <input type="range" id="speed" min="60" max="2000" step="20" value="600">
       <span class="badge" id="speedLbl">600 ms</span>
     </span>
-    <button id="resetBtn" class="primary">New game</button>
+    <button id="resetBtn" class="primary">New game<span class="kb">N</span></button>
   </div>
 </header>
 
@@ -579,6 +600,12 @@ const REDUCE = (typeof matchMedia === 'function')
 /* ---------- tiny helpers ---------- */
 function el(tag, cls, txt){ const e=document.createElement(tag); if(cls)e.className=cls;
   if(txt!==undefined)e.textContent=txt; return e; }
+function keycap(txt){ return el('span','key', txt); }
+function btn(cls, txt, key){            /* a button with its shortcut drawn inside */
+  const b = el('button', cls, txt);
+  if(key) b.appendChild(el('span','kb', key));
+  return b;
+}
 function fx(node, key){ if(node && node.setAttribute) node.setAttribute('data-fx', key); return node; }
 function q(key){ return (document.querySelector)
   ? document.querySelector('[data-fx="'+key+'"]') : null; }
@@ -866,6 +893,7 @@ function bankGem(color, n, pick){
     if(sel.includes(color)) g.classList.add('on');
     if(!canAdd(color) && !sel.includes(color)) g.classList.add('dim');
     g.onclick = ()=>clickGem(color);
+    g.appendChild(keycap(String(color + 1)));
   }
   return g;
 }
@@ -994,6 +1022,7 @@ function matEl(p, wide){
     if(mine && isMyTurn() && S.phase==='discard' && S.mask[a]){
       c.classList.add('pick'); c.classList.remove('z');
       c.onclick = ()=>send(a);
+      c.appendChild(keycap(String(i + 1)));
     }
     tok.appendChild(c);
   });
@@ -1089,12 +1118,44 @@ function trackCursor(node, desc){
   node.onmouseenter = ()=>moveCursor(cell);      /* mouse and keyboard mix */
   return node;
 }
+/* the caps under a card sit on its .slot wrapper (the card clips overflow) */
+function slotOf(n){ return (n.parentNode && n.parentNode.classList
+                            && n.parentNode.classList.contains('slot')) ? n.parentNode : n; }
+function cardKeys(cell){                 /* [[cap, cls], ...] for the focused card */
+  if(!cell || !canAct()) return [];
+  const a = cardActions(cardAt(cell));
+  const buy = legalAction(a.buy), res = legalAction(a.res);
+  const out = [];
+  if(buy || res) out.push(sel.length ? null : '↵');   /* Enter acts unless gems are picked */
+  if(buy) out.push('B');
+  if(res) out.push('R');
+  return out.filter(Boolean);
+}
 function paintCursor(){
   const key = cellKey(cursor);
   for(const k in cursorNodes){
     const n = cursorNodes[k];
     if(!n || !n.classList) continue;
-    if(k===key) n.classList.add('kfocus'); else n.classList.remove('kfocus');
+    const host = slotOf(n);
+    const old = host.querySelector && host.querySelector(':scope > .keys');
+    if(old) old.remove();
+    if(k===key){
+      n.classList.add('kfocus');
+      const caps = cardKeys(cursor);
+      if(caps.length){
+        const row = el('div','keys');
+        caps.forEach(c=>row.appendChild(keycap(c)));
+        host.appendChild(row);
+      }
+    } else {
+      n.classList.remove('kfocus');
+    }
+  }
+  /* no cursor yet: show where the arrow keys start (tier 1, first card) */
+  if(!cursor && canAct() && !sel.length && !selCard){
+    const n = cursorNodes[cellKey({row:2, col:1})];
+    if(n){ const row = el('div','keys home'); row.appendChild(keycap('← ↑ → ↓'));
+           slotOf(n).appendChild(row); }
   }
 }
 /* moving the cursor never re-renders the board (so hovering cannot yank the
@@ -1182,6 +1243,7 @@ function render(st){
     if(isMyTurn() && S.phase==='noble' && S.mask[a]){
       d.classList.add('clickable','buyable');
       d.onclick = ()=>send(a);
+      d.appendChild(keycap(String(slot + 1)));
     }
     nb.appendChild(d);
   });
@@ -1299,12 +1361,12 @@ function barBody(bar){
     const me = S.players.find(p=>p.seat===S.human);
     bar.appendChild(el('span','mtag','discard'));
     bar.appendChild(el('span','hint','You have '+sum(me.tokens)
-      + ' tokens, return down to 10: click one of your tokens.'));
+      + ' tokens, return down to 10: click one of your tokens, or press its number (6 = gold).'));
     return;
   }
   if(S.phase==='noble'){
     bar.appendChild(el('span','mtag','noble'));
-    bar.appendChild(el('span','hint','Choose a noble — click a highlighted tile.'));
+    bar.appendChild(el('span','hint','Choose a noble — click a highlighted tile, or press its number.'));
     return;
   }
   bar.appendChild(el('span','mtag','your move'));
@@ -1314,21 +1376,21 @@ function barBody(bar){
     bar.appendChild(chips);
     const a = takeAction();
     if(note) bar.appendChild(el('span','hint', note));
-    const b = el('button', a===null?'':'primary', a===null ? 'not a legal take' : 'Take');
+    const b = btn(a===null?'':'primary', a===null ? 'not a legal take' : 'Take', a===null?'':'↵');
     b.disabled = a===null; b.onclick = ()=>send(a);
     bar.appendChild(b);
-    const clr = el('button','ghost','Clear'); clr.onclick=()=>{sel=[];render(S)};
+    const clr = btn('ghost','Clear','Esc'); clr.onclick=()=>{sel=[];render(S)};
     bar.appendChild(clr);
   } else if(activeCard()){
     /* the bar follows the card under the mouse OR under the keyboard cursor */
     const act = cardActions(activeCard());
     const buy = act.buy, res = act.res;
     bar.appendChild(el('span','hint', act.label));
-    if(buy!==null){ const b=el('button','primary','Buy'); b.disabled=!S.mask[buy];
+    if(buy!==null){ const b=btn('primary','Buy', S.mask[buy] ? '↵ / B' : 'B'); b.disabled=!S.mask[buy];
       b.onclick=()=>send(buy); bar.appendChild(b); }
-    if(res!==null){ const b=el('button',null,'Reserve'); b.disabled=!S.mask[res];
-      b.onclick=()=>send(res); bar.appendChild(b); }
-    const clr = el('button','ghost','Cancel');
+    if(res!==null){ const b=btn(null,'Reserve', (!S.mask[buy] && S.mask[res]) ? '↵ / R' : 'R');
+      b.disabled=!S.mask[res]; b.onclick=()=>send(res); bar.appendChild(b); }
+    const clr = btn('ghost','Cancel','Esc');
     clr.onclick=()=>{selCard=null; cursor=null; render(S)};
     bar.appendChild(clr);
   } else {
@@ -1337,7 +1399,7 @@ function barBody(bar){
   }
   if(S.mask[A.PASS]){
     const only = S.mask.reduce((n,v)=>n+v,0)===1;
-    const b = el('button', only?'primary':'', 'Pass');
+    const b = btn(only?'primary':'', 'Pass', 'P');
     b.disabled = !only; b.onclick=()=>send(A.PASS);
     bar.appendChild(b);
   }
