@@ -1685,6 +1685,8 @@ function ckLabel(c){
   return m ? c.label + '  ·  ' + fmtSteps(+m[1]) + ' steps' : c.label;
 }
 function isBot(sp){ return sp==='random' || sp==='greedy'; }
+/* bots and PufferLib 5.0 weight files cannot be wrapped in MCTS search */
+function noSearch(sp){ return isBot(sp) || sp.indexOf('puffer5:')===0; }
 function specParse(spec){
   if(!spec) return {spec:'random', search:false, sims:64};
   if(spec.indexOf('mcts:')!==0) return {spec:spec, search:false, sims:64};
@@ -1692,7 +1694,7 @@ function specParse(spec){
   return m ? {spec:m[1], search:true, sims:+m[2]} : {spec:rest, search:true, sims:64};
 }
 function specJoin(s){
-  if(isBot(s.spec) || !s.search) return s.spec;
+  if(noSearch(s.spec) || !s.search) return s.spec;
   return 'mcts:' + s.spec + ':' + Math.max(1, Math.min(100000, s.sims|0));
 }
 function specLabel(spec){
@@ -1736,10 +1738,10 @@ function seatRow(i){
     if(s.spec===c.path) o.selected=true; dd.appendChild(o); });
   dd.value = s.spec;
   dd.title = s.spec;
-  dd.onchange = ()=>{ s.spec = dd.value; if(isBot(s.spec)) s.search=false;
+  dd.onchange = ()=>{ s.spec = dd.value; if(noSearch(s.spec)) s.search=false;
                       cfgErr=''; renderSetup(); };
   row.appendChild(dd);
-  const ck = !isBot(s.spec);
+  const ck = !noSearch(s.spec);
   const lab = el('label','switch'); lab.title = 'play this seat with MCTS search';
   const cb = el('input'); cb.type='checkbox'; cb.checked = ck && s.search; cb.disabled = !ck;
   cb.onchange = ()=>{ s.search = !!cb.checked; cfgErr=''; renderSetup(); };

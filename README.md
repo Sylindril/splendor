@@ -1,4 +1,4 @@
-# Splendor for PufferLib 3.0
+# Splendor for PufferLib
 
 A fast, self-play Splendor environment: all game logic lives in one C header
 (`splendor/splendor.h`), wrapped by a thin PufferLib binding and a thin Python
@@ -74,6 +74,27 @@ python train.py --env.num-players 4 --rnn-name Recurrent   # 4p, LSTM policy
 ```
 
 Checkpoints are written to `experiments/`.
+
+## PufferLib 5.0
+
+PufferLib 5.0 is a C/CUDA rewrite where an environment is one header compiled
+into the trainer. `pufferlib5/` holds the 5.0 front-end of this environment;
+the rules live in `splendor/game.h` and are shared verbatim with the 3.0
+binding, so the two cannot drift apart.
+
+```bash
+./pufferlib5/install.sh /path/to/PufferLib      # copies the env + config into a 5.0 checkout
+cd /path/to/PufferLib
+bash ./build.sh splendor && ./puffer train splendor          # CUDA + nvcc required
+bash ./build.sh splendor --cpu && ./splendor --headless --eval_episodes=100   # Mac-friendly
+```
+
+Self-play against a pool of past checkpoints and a bot ladder (random, greedy)
+are configured in `pufferlib5/splendor.ini`. Exported `*_weights.bin` policies
+load into every Python tool here as `puffer5:PATH:HIDDEN:LAYERS`
+(`splendor/puffernet.py` reproduces 5.0's encoder + MinGRU + decoder network
+exactly). See `pufferlib5/README.md` for details, including the fact that 5.0
+training needs a CUDA machine.
 
 ## League training (the serious run)
 

@@ -323,15 +323,24 @@ class GreedyAgent(Agent):
 
 
 AGENTS = {'random': RandomAgent, 'greedy': GreedyAgent}
+# Specs that are not a bot name and not a torch checkpoint path:
+#   'puffer5:PATH[:HIDDEN[:LAYERS]]'  PufferLib 5.0 exported weights (*_weights.bin),
+#                                     HIDDEN / LAYERS default to 512 / 2.
+PUFFER5 = 'puffer5:'
 
 
 def make_agent(spec, num_players=2, device='cpu', seed=0, temperature=0.0,
                name=None):
-    """Build an agent from a string: 'random', 'greedy', 'latest' or a .pt path."""
+    """Build an agent from a string: 'random', 'greedy', 'latest', a .pt path
+    or 'puffer5:PATH:HIDDEN:LAYERS' (a PufferLib 5.0 `*_weights.bin`)."""
     if isinstance(spec, Agent):
         return spec
     if spec in AGENTS:
         a = AGENTS[spec](seed=seed)
+    elif isinstance(spec, str) and spec.strip().startswith(PUFFER5):
+        from splendor.puffernet import PufferNetAgent   # torch, imported lazily
+        a = PufferNetAgent.from_spec(spec, num_players, device,
+                                     temperature=temperature, seed=seed)
     else:
         a = PolicyAgent.from_checkpoint(spec, num_players, device,
                                         temperature=temperature, seed=seed)

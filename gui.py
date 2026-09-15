@@ -6,7 +6,8 @@
 
 Serves a single self-contained page (splendor/gui/index.html) plus a tiny JSON
 API.  Every non-human seat is a `splendor.agents.Agent` built from a string
-spec -- 'random', 'greedy', a checkpoint path, or 'mcts:PATH:SIMS' -- and the
+spec -- 'random', 'greedy', a checkpoint path, 'mcts:PATH:SIMS' or
+'puffer5:PATH:HIDDEN:LAYERS' (PufferLib 5.0 weights) -- and the
 page can re-deal the table with a different line-up through POST /config.
 """
 import argparse
@@ -96,6 +97,13 @@ def visible(c):
 #   'random' / 'greedy'      the built-in yardsticks
 #   'experiments/latest.pt'  a policy checkpoint (greedy, or sampled if --sample)
 #   'mcts:PATH:SIMS'         PUCT search over that checkpoint (SIMS default 64)
+#   'puffer5:PATH:H:L'       a PufferLib 5.0 '*_weights.bin' export (H x L MinGRU)
+
+PUFFER5 = 'puffer5:'
+
+
+def is_puffer5(spec):
+    return isinstance(spec, str) and spec.strip().startswith(PUFFER5)
 
 _scan = {}          # path -> ((mtime, size), num_players or None)
 
@@ -144,10 +152,41 @@ def checkpoints(roots=(MODELS, EXPERIMENTS)):
             _scan[path] = hit
         if hit[1] is None:
             continue
-        out.append({'path': os.path.relpath(path, HERE),
+        out.append({'path': os.path.relpath(path, HERE), 'kind': 'pt',
                     'label': os.path.relpath(path, root if root == EXPERIMENTS else HERE),
                     'num_players': hit[1], 'mtime': st.st_mtime})
+    out += puffer5_checkpoints(roots)
     out.sort(key=lambda c: -c['mtime'])
+    return out
+
+
+def puffer5_checkpoints(roots=(MODELS, EXPERIMENTS)):
+    """The same, for PufferLib 5.0 '*_weights.bin' exports.
+
+    Those files are a flat float32 blob, so the architecture is solved for from
+    the file size; 'path' is the full agent spec ('puffer5:REL:HIDDEN:LAYERS')
+    because that is what the page hands back as the seat's spec."""
+    from splendor import puffernet as PN
+    out = []
+    for root in roots:
+        for path in glob.glob(os.path.join(root, '**', '*_weights.bin'),
+                              recursive=True):
+            try:
+                st = os.stat(path)
+            except OSError:
+                continue
+            key = (st.st_mtime, st.st_size)
+            hit = _scan.get(path)
+            if hit is None or hit[0] != key:
+                hit = (key, PN.infer_arch(path))
+                _scan[path] = hit
+            if hit[1] is None:            # not a PufferNet weight file
+                continue
+            num_players, hidden, layers = hit[1]
+            spec = PN.spec_for(os.path.relpath(path, HERE), hidden, layers)
+            out.append({'path': spec, 'kind': 'puffer5',
+                        'label': PN.spec_label(spec),
+                        'num_players': num_players, 'mtime': st.st_mtime})
     return out
 
 
@@ -168,8 +207,12 @@ def parse_spec(spec):
     return rest, max(1, min(sims, 100000))
 
 
-def resolve(path):
-    """A checkpoint path as given, or relative to the project directory."""
+def resolve(path, num_players=2):
+    """A checkpoint path as given, relative to the project directory, or
+    'latest' = the newest checkpoint trained for `num_players`."""
+    if path == 'latest':
+        from splendor.agents import latest_checkpoint
+        return latest_checkpoint(num_players)
     for p in (path, os.path.join(HERE, path)):
         if os.path.isfile(p):
             return p
@@ -178,6 +221,9 @@ def resolve(path):
 
 def spec_label(spec):
     """Human-readable name for a spec, e.g. 'latest.pt . MCTS 64'."""
+    if is_puffer5(spec):
+        from splendor import puffernet as PN
+        return PN.spec_label(spec)
     base, sims = parse_spec(spec)
     if base in BOTS:
         return base
@@ -195,11 +241,26 @@ def build_agent(spec, num_players, sample=False, seed=0, max_turns=None):
     from splendor import agents
     base, sims = parse_spec(spec)
     temperature = 1.0 if sample else 0.0
+    if is_puffer5(base):
+        from splendor import puffernet as PN
+        if sims is not None:
+            raise ValueError('search needs a .pt checkpoint, not PufferLib 5.0 weights')
+        weights, hidden, layers = PN.parse_spec(base)
+        arch = PN.infer_arch(resolve(weights))
+        if arch is None:
+            raise ValueError('%s is not a PufferNet weight file'
+                             % os.path.basename(weights))
+        if arch[0] != num_players:
+            raise ValueError('%s is a %d-player weight file, this table has %d seats'
+                             % (os.path.basename(weights), arch[0], num_players))
+        return agents.make_agent(PN.spec_for(resolve(weights), hidden, layers),
+                                 num_players, seed=seed, temperature=temperature,
+                                 name=spec_label(base))
     if base in BOTS:
         if sims is not None:
             raise ValueError('search needs a checkpoint, not %r' % base)
         return agents.make_agent(base, num_players, seed=seed)
-    path = resolve(base)
+    path = resolve(base, num_players)
     P = checkpoint_players(path)
     if P is None:
         raise ValueError('%s is not a readable policy checkpoint' % base)

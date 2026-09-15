@@ -7,8 +7,8 @@
 #include "env_binding.h"
 
 // Opaque snapshot of the whole game state (everything after the buffer pointers).
-#define STATE_OFFSET offsetof(Splendor, num_players)
-#define STATE_SIZE (sizeof(Splendor) - STATE_OFFSET)
+#define STATE_OFFSET offsetof(Splendor, game)
+#define STATE_SIZE sizeof(Game)
 
 static PyObject* my_get(PyObject* dict, Env* env) {
     PyObject* state = PyBytes_FromStringAndSize((char*)env + STATE_OFFSET, STATE_SIZE);
@@ -33,27 +33,27 @@ static int my_put(Env* env, PyObject* args, PyObject* kwargs) {
     }
     PyObject* bonuses = PyDict_GetItemString(kwargs, "bonuses");
     if (bonuses != NULL) {
-        int n = env->num_players * NUM_COLORS;
+        int n = env->game.num_players * NUM_COLORS;
         if (!PySequence_Check(bonuses) || PySequence_Size(bonuses) != n) {
             PyErr_SetString(PyExc_ValueError, "bonuses must be a flat list of num_players*5 ints");
             return 1;
         }
         for (int i = 0; i < n; i++) {
             PyObject* item = PySequence_GetItem(bonuses, i);
-            env->bonuses[i / NUM_COLORS][i % NUM_COLORS] = (unsigned char)PyLong_AsLong(item);
+            env->game.bonuses[i / NUM_COLORS][i % NUM_COLORS] = (unsigned char)PyLong_AsLong(item);
             Py_DECREF(item);
         }
     }
     PyObject* det = PyDict_GetItemString(kwargs, "determinize");
     if (det != NULL) {
         int seat = (int)PyLong_AsLong(det);
-        if (seat < 0 || seat >= env->num_players) {
+        if (seat < 0 || seat >= env->game.num_players) {
             PyErr_SetString(PyExc_ValueError, "determinize must be a seat index");
             return 1;
         }
-        determinize(env, seat);
+        game_determinize(&env->game, seat);
     }
-    compute_mask(env);
+    game_mask(&env->game);
     write_obs(env);
     return 0;
 }
@@ -68,8 +68,8 @@ static int my_init(Env* env, PyObject* args, PyObject* kwargs) {
         PyErr_SetString(PyExc_ValueError, "num_players must be between 2 and 4");
         return 1;
     }
-    env->num_players = num_players;
-    env->max_turns = (int)unpack(kwargs, "max_turns");
+    env->game.num_players = num_players;
+    env->game.max_turns = (int)unpack(kwargs, "max_turns");
     env->reward_point = (float)unpack(kwargs, "reward_point");
     env->reward_card = (float)unpack(kwargs, "reward_card");
     env->reward_win = (float)unpack(kwargs, "reward_win");
@@ -79,11 +79,11 @@ static int my_init(Env* env, PyObject* args, PyObject* kwargs) {
     if (PyErr_Occurred()) {
         return 1;
     }
-    if (env->max_turns <= 0) {
+    if (env->game.max_turns <= 0) {
         PyErr_SetString(PyExc_ValueError, "max_turns must be positive");
         return 1;
     }
-    env->rng = seed_rng(seed);
+    env->game.rng = seed_rng(seed);
     c_reset(env);
     return 0;
 }

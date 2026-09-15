@@ -291,3 +291,58 @@ policy cross-entropy + value MSE for a few epochs, saves experiments/az/iter_{k}
 repeats; `--init latest` warm-starts from a PPO checkpoint. Report sims/s.
 
 - 2026-09-14: `auto_reset` kwarg (default 1). With 0 the env sets `game_over`, writes the final obs with an all-zero mask and ignores steps until c_reset (used by gui.py for an inspectable end screen).
+
+# Phase 3 (2026-09-15): PufferLib 5.0 port
+
+PufferLib 5.0 (branch `5.0` of github.com/PufferAI/PufferLib, cloned at
+/private/tmp/claude-503/-Users-adityaku-Fun-Projects-Splendor/0e24f5ca-e9ce-4113-ba4c-86267a0bee4a/scratchpad/PufferLib5,
+call it $PL5) is a pure C/CUDA rewrite: an env is ONE header `ocean/NAME/NAME.h` compiled into the trainer by
+`./build.sh NAME` (nvcc, CUDA required) or into a CPU play/eval binary by `./build.sh NAME --cpu` (clang + raylib +
+libomp; works on this Mac). Config is `config/NAME.ini` layered on `config/default.ini`. Run `./puffer train|eval|match|sweep`.
+Read $PL5/src/pufferenv.h, $PL5/ocean/template/template.h, $PL5/config/default.ini, $PL5/ocean/chess/chess.h
+(two-seat self-play with masks), $PL5/src/puffercpu.c (CPU main + PufferNet), $PL5/SKILL_ISSUES.md (style guide).
+
+## Env contract (from pufferenv.h / pufferl.cu)
+```c
+typedef unsigned char obs_t;      // BEFORE #include "pufferenv.h"
+#include "pufferenv.h"            // defines Agent {obs_t* observations; float* actions; float* rewards;
+                                  //   float* terminals; unsigned char* action_mask; int policy;}, Dict, Log/Env fwd decls
+#define ACT_SIZES {72}
+#define NUM_ATNS 1
+#define OBS_SIZE (240 + 48*SPLENDOR_PLAYERS)   // compile-time; SPLENDOR_PLAYERS defaults to 2, override with
+                                               // NVCC_EXTRA="-DSPLENDOR_PLAYERS=4" ./build.sh splendor puffer4
+struct Log { float ...; float n; };            // flat floats; trainer sums envs with n != 0 and divides by n
+struct Env { Log log; Agent agents[SPLENDOR_PLAYERS]; int tag; int boundary_reached; int num_agents; ... };
+void puf_init(Env*, Dict* kwargs);   // set num_agents, agents[s].policy (0 learner, 1 historical for s>0),
+                                     // agents[s].action_mask = NULL (trainer assigns buffers after init), read kwargs
+void puf_reset(Env*); void puf_step(Env*); void puf_render(Env*); void puf_close(Env*); void puf_log(Log*, Dict* out);
+```
+Per step: read `(int)agents[s].actions[0]` for the seat to move, write every seat's observations, `rewards[0]`,
+`terminals[0]` (float), and its 72-byte `action_mask` (if non-NULL; 1 = legal). Idle seats: mask = PASS only.
+The trainer samples one action per agent per step from masked logits. Terminal: rewards/terminals then reset in
+the same step (the returned obs are the new game's), as in 3.0. Log: keep `n` counting finished games.
+Bot ladder (optional, for `[selfplay] eval_bots`): `#define PUF_HAS_BOT_POLICY` and `void puf_set_bot_policy(Env*, int)`;
+seats > 0 are then played inside puf_step by the bot (0 = none, 1 = random-legal, 2 = greedy heuristic as in agents.py).
+Self-play: `[selfplay] enabled = 1`, `[vec] num_policies = 2, hist_policy_percent, hist_policy_hidden_size/num_layers`.
+The trainer forces every seat to policy 0 on the (1 - hist_policy_percent) majority and keeps seat 0 = learner,
+seats > 0 = historical checkpoint on the rest. Default policy: Linear(OBS_SIZE->H) -> num_layers x MinGRU(H) ->
+Linear(H -> 72 + 1 value). Exported weights `checkpoints/..._weights.bin` = float32, in order: encoder W (H x OBS),
+decoder W ((73) x H), then per layer MinGRU proj (3H x H), each block padded to a multiple of 8 floats, no biases
+(see puffercpu.c make_linear/get_weights_aligned, mingru(), puffernet_weight_count).
+
+## Refactor: one game core, two front-ends
+- `splendor/game.h` (new, pure C, no PufferLib types): the card/noble tables, RNG, `Game` state struct (everything
+  now inside `Splendor` after the buffer pointers), `game_reset`, `game_mask(seat, out72)`, `game_obs(seat, out)`
+  (perspective-relative layout unchanged), `game_apply(action)` (one step incl. sub-phases; returns whether the
+  turn completed / the game ended, plus per-seat outcome), `game_determinize(seat)`, `game_render_text`.
+- `splendor/splendor.h` (3.0) becomes a thin wrapper that includes game.h and keeps EXACTLY the same behaviour,
+  binding API, state snapshot bytes semantics (get_state/put_state must keep working; the snapshot may now be the
+  Game struct) and log fields; all 42 tests must pass unchanged.
+- `pufferlib5/splendor.h` (5.0 front-end) includes `game.h` via a relative path resolved at install time (the
+  install script copies game.h next to it as `ocean/splendor/game.h`).
+- `pufferlib5/splendor.ini`, `pufferlib5/install.sh PL5_DIR` (copies the two headers + ini into a PufferLib 5.0
+  checkout and prints the build/train commands), `pufferlib5/README.md`.
+- `splendor/puffernet.py`: `load_puffernet(path, obs_size, hidden, layers)` -> torch module reproducing the C
+  forward exactly (encoder, MinGRU stack with carried state, decoder, masked argmax/sampling), plus
+  `PufferNetAgent(Agent)` with per-game recurrent state reset on game end, registered in `agents.make_agent` as
+  spec `puffer5:PATH:HIDDEN:LAYERS` and listed by the GUI picker for `*_weights.bin` files.

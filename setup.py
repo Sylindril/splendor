@@ -12,7 +12,7 @@ setup(
         Extension(
             'splendor.binding',
             sources=['splendor/binding.c'],
-            depends=['splendor/splendor.h'],  # rebuild when the header changes
+            depends=['splendor/splendor.h', 'splendor/game.h'],  # rebuild when the header changes
             include_dirs=[
                 numpy.get_include(),
                 os.path.join(os.path.dirname(pufferlib.__file__), 'ocean'),

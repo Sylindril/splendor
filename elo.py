@@ -44,6 +44,11 @@ def expand(specs):
 def label(spec):
     if spec in A.AGENTS or spec == 'latest':
         return spec
+    if spec.startswith(A.PUFFER5):   # PufferLib 5.0 weights: 'puffer5:PATH[:H[:L]]'
+        from splendor import puffernet
+        path, hidden, layers = puffernet.parse_spec(spec)
+        base = os.path.basename(path).replace('_weights.bin', '').replace('.bin', '')
+        return f'{base}-{hidden}x{layers}'
     return os.path.basename(spec)[:-3] if spec.endswith('.pt') else os.path.basename(spec)
 
 
@@ -53,6 +58,10 @@ def checkpoint_players(path):
     try:
         import torch
         from splendor import layout as L
+        if path.startswith(A.PUFFER5):
+            from splendor import puffernet
+            arch = puffernet.infer_arch(puffernet.parse_spec(path)[0])
+            return arch[0] if arch else None
         if path == 'latest':
             path = max(glob.glob('experiments/**/*.pt', recursive=True),
                        key=os.path.getmtime)
