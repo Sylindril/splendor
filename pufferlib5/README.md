@@ -1,4 +1,9 @@
-# Splendor for PufferLib 5.0
+# Splendor for PufferLib 5.0 (work in progress)
+
+> **WIP, pending the official PufferLib 5.0 release.** The 5.0 branch API may
+> change; the env logic here is tested, but `./puffer train splendor` has not
+> yet been run on a CUDA machine. The supported path is the PufferLib 3.0
+> environment in the repository root.
 
 PufferLib 5.0 is a pure C/CUDA rewrite: an environment is a single header that
 is compiled directly into the trainer. This directory is the 5.0 front-end for

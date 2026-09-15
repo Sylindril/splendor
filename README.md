@@ -1,4 +1,4 @@
-# Splendor for PufferLib
+# Splendor for PufferLib 3.0
 
 A fast, self-play Splendor environment: all game logic lives in one C header
 (`splendor/splendor.h`), wrapped by a thin PufferLib binding and a thin Python
@@ -75,12 +75,17 @@ python train.py --env.num-players 4 --rnn-name Recurrent   # 4p, LSTM policy
 
 Checkpoints are written to `experiments/`.
 
-## PufferLib 5.0
+## PufferLib 5.0 (work in progress)
 
-PufferLib 5.0 is a C/CUDA rewrite where an environment is one header compiled
-into the trainer. `pufferlib5/` holds the 5.0 front-end of this environment;
-the rules live in `splendor/game.h` and are shared verbatim with the 3.0
-binding, so the two cannot drift apart.
+**Status: WIP, pending PufferLib 5.0's official release.** Everything in this
+README targets PufferLib 3.0 (`pip install pufferlib`), which is the supported
+path. PufferLib 5.0 currently exists only as the `5.0` branch on GitHub: a
+C/CUDA rewrite where an environment is one header compiled into the trainer.
+`pufferlib5/` holds a port of this environment to that branch; the rules live
+in `splendor/game.h` and are shared verbatim with the 3.0 binding, so the two
+cannot drift apart. The port's env logic is tested (sanitized harnesses, a CPU
+build), but its training run has not been exercised on a CUDA machine, and
+the 5.0 API may still change before release. Expect breakage until then.
 
 ```bash
 ./pufferlib5/install.sh /path/to/PufferLib      # copies the env + config into a 5.0 checkout
