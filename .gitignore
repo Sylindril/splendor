@@ -11,3 +11,6 @@ experiments/
 .venv/
 .pytest_cache/
 resources
+paper/*.aux
+paper/*.log
+paper/*.out

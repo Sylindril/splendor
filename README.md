@@ -232,6 +232,10 @@ which deals the next game inside the terminal step.
 
 ## Citing
 
+A short technical note describing the environment, the league trainer and
+the results is in `paper/` (`main.pdf`); an arXiv link will replace the
+repository URL below once it is posted.
+
 If you use this environment, the trained models, or the GUI in research or a
 project, please cite it (GitHub's "Cite this repository" button uses
 `CITATION.cff`):
