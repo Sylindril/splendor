@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this environment, the trained models, or the GUI in your work, please cite it as below."
+title: "Splendor: a fast PufferLib environment with league self-play, Elo and MCTS"
+type: software
+authors:
+  - family-names: Kumar
+    given-names: Aditya
+    email: adityaku@andrew.cmu.edu
+repository-code: "https://github.com/Sylindril/splendor"
+url: "https://github.com/Sylindril/splendor"
+license: MIT
+version: 0.1.0
+date-released: 2026-09-14
+keywords:
+  - reinforcement learning
+  - Splendor
+  - PufferLib
+  - self-play
+  - MCTS
+abstract: >-
+  An exact-rules, 2-4 player Splendor board game environment written in C for
+  PufferLib (about 4 million turns per second per core), with masked MLP
+  policies, a prioritized fictitious self-play league trainer, a Bradley-Terry
+  Elo ladder, batched PUCT Monte Carlo tree search with an AlphaZero-style
+  training loop, shipped trained models, and a browser GUI for watching or
+  playing against the agents.

@@ -230,6 +230,22 @@ which deals the next game inside the terminal step.
 `env.put_state(i, state=...)` restores it (useful for search / MCTS);
 `env.put_state(i, bonuses=[...])` overwrites bonus cards for tests.
 
+## Citing
+
+If you use this environment, the trained models, or the GUI in research or a
+project, please cite it (GitHub's "Cite this repository" button uses
+`CITATION.cff`):
+
+```bibtex
+@software{kumar2026splendor,
+  author = {Kumar, Aditya},
+  title  = {Splendor: a fast PufferLib environment with league self-play, Elo and MCTS},
+  year   = {2026},
+  url    = {https://github.com/Sylindril/splendor},
+  note   = {Version 0.1.0}
+}
+```
+
 ## License
 
-MIT, see `LICENSE`.
+MIT, see `LICENSE`. Citation is requested as a courtesy; it is not a license condition.
