@@ -6,7 +6,8 @@
 \usepackage{amsmath}
 \hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, citecolor=blue}
 
-\title{A Fast Splendor Environment for Self-Play Reinforcement Learning}
+\title{Splendor as a Fast Reinforcement Learning Environment:\\
+League Self-Play, Elo Evaluation and Search}
 \author{Aditya Kumar\\ \small Carnegie Mellon University \quad \texttt{adityaku@andrew.cmu.edu}}
 \date{September 2026}
 
@@ -14,90 +15,101 @@
 \maketitle
 
 \begin{abstract}
-This note describes an implementation of the board game Splendor as a reinforcement
-learning environment. The rules are implemented exactly, for two to four players, in a small
-C library that runs about four million turns per second on one core. Around it we built a
-self-play trainer with a pool of past opponents, an Elo ladder, a Monte Carlo tree search,
-and a browser interface. A policy trained for 300 million steps on one desktop beats a strong
-greedy heuristic by about 230 Elo. Adding 64 simulations of search per move adds about 100
-more. Code and trained models are at \url{https://github.com/Sylindril/splendor}.
+We present an exact-rules implementation of the board game \emph{Splendor} (2--4 players) as a
+reinforcement learning environment for PufferLib. The game logic is a single C header that
+advances roughly four million turns per second on one CPU core, exposes a legal-action mask
+inside the observation, and supports state snapshots for tree search. On top of it we build a
+prioritized fictitious self-play league for PPO, a Bradley--Terry Elo ladder with fixed
+heuristic yardsticks, a batched PUCT Monte Carlo tree search with an AlphaZero-style training
+loop, and a browser interface for watching or playing against agents. A 300M-step league run
+on a single workstation produces a 2-player policy rated about 230 Elo above a strong greedy
+heuristic and 215 Elo above plain self-play with the same network and budget; 64 simulations of
+search add a further 100 Elo. Code, trained models and the interface are released under the MIT
+license at \url{https://github.com/Sylindril/splendor}.
 \end{abstract}
 
-\section{Why Splendor}
-Splendor sits between the classic two-player board games and large multi-agent
-simulations. It has hidden cards, random draws, decisions inside a turn (which tokens to
-return, which noble to take), and two to four players. Games last about sixty turns. We could
-not find an implementation fast enough to train on hundreds of millions of samples, so we
-wrote one.
+\section{Introduction}
+Splendor is a resource-management card game with hidden information (deck order and
+face-down reserved cards), chance (card draws), sub-turn decisions (returning tokens above the
+ten-token limit, choosing among nobles) and two to four players. These properties make it a
+useful mid-sized testbed between fully observable two-player board games and large
+multi-agent simulations. Existing implementations are written for human play or for slow
+Python search and are not suitable for training policies with hundreds of millions of samples.
 
-\section{The environment}
-The game logic is one C header. A struct holds one game. Each seat is an agent, so a vector
-of $N$ games exposes $NP$ agents to the learner, where $P$ is the number of players. One step
-is one turn by the seat to move. The other seats are idle for that step: their actions are
-ignored and their observation says so.
+This note describes a from-scratch environment designed for throughput and simplicity, and the
+training and evaluation tooling around it. The contributions are practical: (i) an exact-rules
+engine with a compact fixed-size observation and a 72-way discrete action space that is
+verified by sanitizer runs and invariant tests; (ii) a league training wrapper that removes
+idle transitions and mixes the current policy with a pool of past checkpoints sampled by
+prioritized fictitious self-play (PFSP)~\cite{vinyals2019}; (iii) an Elo ladder built on
+Bradley--Terry ratings~\cite{hunter2004} with fixed bots as anchors; (iv) a batched PUCT search
+that uses engine snapshots and determinization, and (v) shipped models with an interface.
 
-The rules are the published ones. Ninety cards in three tiers, four face up per tier. Ten
-nobles, of which $P+1$ are dealt. A bank of 4, 5 or 7 gems per color for 2, 3 or 4 players,
-plus five gold. On a turn a player takes up to three gems of different colors, takes two of
-one color if at least four remain, reserves a card and gains a gold, or buys a card. Cost is
-paid from bonus cards first, then gems, then gold. A player above ten tokens returns tokens
-one at a time. After a purchase, a qualifying noble visits; if several qualify, the player
-chooses. The game ends at the end of the round in which someone reaches fifteen points.
-Fewest cards breaks ties. The starting seat is random. The card list was checked against four
-other open implementations.
+\section{Environment}
+\paragraph{Rules.} The engine implements the published rules without simplification: 90
+development cards in three tiers with four face-up per tier, ten nobles of which $P+1$ are
+dealt, a bank of 4/5/7 gems per color for 2/3/4 players plus five gold jokers, the four turn
+actions (take up to three different gems, take two of one color when at least four remain,
+reserve a face-up or deck-top card gaining a gold, buy a card paying with bonuses then gems
+then gold), the ten-token limit enforced by a discard phase, noble visits after a purchase
+with a choice when several qualify, and game end at the end of the round in which a player
+reaches 15 points, with the fewest-cards tie-break. The start seat is randomized per game so
+that seat index carries no advantage. The card table was cross-checked against four
+independent open-source implementations.
 
-The observation is a vector of $240 + 48P$ bytes: the bank, deck sizes, the twelve face-up
-cards, the nobles, one block per player (tokens, bonuses, points, reserved cards; opponents'
-deck-top reserves are hidden), a 72-way legal-action mask, the turn number, and a flag saying
-whether this seat is to move. The policy reads the mask from the observation and masks its
-own logits. The trainer never sees an illegal action. The engine can also snapshot and
-restore a game, freeze a game for a step, and re-deal everything a given seat cannot see. The
-search uses these.
+\paragraph{Interface.} One C struct holds one game; each seat is a PufferLib agent, so a
+vectorized environment of $N$ games exposes $NP$ agents. One environment step is one turn of
+the seat to move; other seats' actions are ignored and their observations carry a pass-only
+mask. Sub-phases (discard, noble choice) are additional steps by the same seat. The
+observation is a fixed vector of $240 + 48P$ bytes: bank, deck sizes, twelve face-up cards
+(cost, bonus, points), five noble requirement vectors, per-player blocks (tokens, bonuses,
+points, three reserved cards with a presence flag; opponents' deck-top reserves are hidden),
+the 72-way legal-action mask, the turn number and a to-move flag. Policies read the mask from
+the observation and mask their logits, so no invalid action is ever sampled and the trainer
+needs no masking support. The engine additionally provides opaque state snapshots, restore,
+a no-op action that freezes a game, and a \emph{determinize} operation that re-deals
+everything a given seat cannot see.
 
-On an Apple M4 Max, one core runs 4.1 million turns per second with random actions, or 1.9
-million when actions are sampled from the mask in NumPy. One million random steps at each
-player count run clean under the address and undefined-behavior sanitizers. Tests check that
-tokens, cards and nobles are conserved, that nobody holds more than ten tokens outside a
-discard phase, and that illegal actions change nothing.
+\paragraph{Throughput.} On an Apple M4 Max, a single core advances 4.1M turns/s with random
+actions and 1.9M turns/s when actions are sampled uniformly from the mask in NumPy. Address
+and undefined-behavior sanitizers over one million random steps at each player count report
+no findings; invariant tests check token, card and noble conservation, the ten-token limit,
+and that illegal actions are no-ops.
 
 \section{Training}
-The policy is a three-layer MLP of width 512 with LayerNorm, 0.74M parameters, with an actor
-head and a value head. Training is PPO as implemented in PufferLib~\cite{suarez2024}.
+\paragraph{Policy.} A three-layer, 512-unit LayerNorm MLP over the scaled observation with
+masked actor and value heads (0.74M parameters). Plain self-play, in which every seat is the
+current policy, works but wastes the idle seats' transitions and can cycle.
 
-Plain self-play, where every seat is the current policy, works but has two costs. Half or
-more of the samples come from idle seats, and the policy can forget how to beat older
-versions of itself. A wrapper fixes both. It shows the trainer only one seat per game. When
-the learner acts, the wrapper plays every other seat with a frozen policy on the CPU, batched
-across games, until it is the learner's turn again. Every sample is now a decision.
-
-The frozen opponents come from two places. Half the games use the latest weights, reloaded
-from disk every few seconds. The rest use a checkpoint from a pool, drawn with the
-prioritized fictitious self-play weights of Vinyals et al.~\cite{vinyals2019}: member $i$ is
-picked in proportion to $(1-w_i)^2 + 0.05$, where $w_i$ is a running estimate of the
-learner's win rate against it. A checkpoint joins the pool every twenty million steps.
-Rewards are $+1$ for a win, $-1$ for a loss, and $0.02$ per prestige point.
-
-The wrapper runs about 180 thousand learner steps per second per process on the reference
-machine. With eight workers and the GPU, training runs at 150 to 180 thousand samples per
-second. The 300 million step run in the next section took 34 minutes.
+\paragraph{League.} A wrapper exposes only the learner's seat to the trainer. Inside one
+wrapper step it applies the learner's action, then plays every opponent seat (including their
+sub-phases) with frozen policies evaluated on CPU inside the worker process, batched per
+model, until the learner is to move again. Every trainer sample is therefore a real decision.
+Opponents are assigned per game: with probability $\tfrac12$ the latest weights (reloaded
+from disk every few seconds), otherwise a member of a pool of past checkpoints sampled with
+PFSP weights $(1-w_i)^2 + 0.05$, where $w_i$ is an exponential moving average of the learner's
+win rate against member $i$. A checkpoint joins the pool every 20M steps. The PPO
+implementation is PufferLib's~\cite{suarez2024}, with V-trace corrections and prioritized
+minibatches, reward $\pm1$ for win/loss plus $0.02$ per prestige point. The wrapper sustains
+about 180K learner steps per second per process on the reference machine; end-to-end training
+runs at 150--180K samples per second with eight workers and an MPS device.
 
 \section{Evaluation}
-We rate agents with the Bradley--Terry model, fit by the MM algorithm of
-Hunter~\cite{hunter2004}, with draws counted as half a win each way and a one-game prior so
-that undefeated agents get a finite rating. Ratings are reported on the Elo scale, with a
-uniform-random agent fixed at zero. Two-player ladders are round robins. Ladders for three
-and four players draw random tables and turn each final ranking into pairwise results.
-
-A greedy heuristic serves as a fixed reference. It buys the most valuable card it can afford,
-otherwise takes the gems that bring the nearest card closest. It beats random every time.
+\paragraph{Ladder.} Ratings are fitted with the Bradley--Terry model by
+minorization--maximization on pairwise results (draws count half), with a one-game prior so
+that undefeated participants remain finite, reported on the Elo scale ($400\log_{10}$) and
+anchored at a uniform-random-legal agent. Two-player ladders are round robins; three- and
+four-player ladders sample random tables and extract pairwise results from final ranks. A
+fixed greedy heuristic (buy the most valuable affordable card, else take gems toward the
+closest card) serves as a stable yardstick: it beats random in 100\% of games.
 
 \begin{table}[h]
 \centering
 \begin{tabular}{lrr}
 \toprule
-Two players, 100 games per pair & Elo & Win \% \\
+Participant (2 players, 100 games per pair) & Elo & Win \% \\
 \midrule
-League, 300M steps & 1210 & 75.7 \\
+League, 300M steps, final & 1210 & 75.7 \\
 League pool, 240M & 1197 & 74.5 \\
 League pool, 160M & 1049 & 58.0 \\
 Plain self-play, same network, 60M & 994 & 52.4 \\
@@ -107,16 +119,17 @@ League pool, 40M & 740 & 28.9 \\
 Random & 0 & 6.7 \\
 \bottomrule
 \end{tabular}
-\caption{Two-player ladder. The curve flattens after 240M steps but has not stopped.}
+\caption{Two-player ladder. The league policy gains about 230 Elo over the greedy bot and 215
+over plain self-play; the curve is flattening but still rising at 300M steps.}
 \end{table}
 
 \begin{table}[h]
 \centering
 \begin{tabular}{lr}
 \toprule
-Four players, 150 random tables & Elo \\
+Participant (4 players, 150 random tables) & Elo \\
 \midrule
-League, 200M steps & 1017 \\
+League, 200M steps, final & 1017 \\
 League pool, 175M & 1009 \\
 League pool, 125M & 971 \\
 Greedy heuristic & 894 \\
@@ -125,40 +138,41 @@ League pool, 25M & 699 \\
 Random & 0 \\
 \bottomrule
 \end{tabular}
-\caption{Four-player ladder. The run was shorter and each seat sees a quarter of the
-decisions, so the margin over the heuristic is smaller.}
+\caption{Four-player ladder after a shorter run; the margin over the heuristic is smaller
+(120 Elo) with a third of the per-seat experience and higher outcome variance.}
 \end{table}
 
-The league policy is about 230 Elo above the greedy bot and 215 above plain self-play with
-the same network. We have no human ratings, so we make no claim about human strength. The
-interface lets a person play the models directly.
-
 \section{Search}
-The search is PUCT over engine snapshots, batched across games. In each round every root
-walks to a leaf; one vectorized environment step expands all the leaves; one forward pass
-evaluates them. Each leaf is evaluated from every seat's point of view, so the backed-up
-value is a vector and works for more than two players. Terminal leaves use the engine's own
-rewards. Before searching, the root is re-dealt from the point of view of the seat to move,
-so the search does not see hidden cards. The engine's random state is part of the snapshot,
-so one search explores one deal.
-
-With the 512-unit network the search runs about 26 thousand simulations per second on CPU
-at a batch of 64 games. Sixty-four simulations per move beat the raw policy in 63\% of
-games, which the ladder reports as about 100 Elo. An AlphaZero-style loop~\cite{silver2018}
-is included: self-play with search, then training on visit counts and outcomes. We ran it
-only at small scale.
+The search is a batched PUCT over engine snapshots: per simulation round every root descends
+to a leaf in lock-step, one vectorized environment step expands all leaves, and one network
+forward pass evaluates them. Values are per-seat vectors (the network is evaluated on every
+seat's observation of the leaf), so multiplayer backups are exact; terminal leaves use the
+engine's rewards. Hidden information is handled by determinizing the root for the seat to
+move, and the engine's random state is part of the snapshot, so a search explores one
+determinization. With the 512-unit network the search runs about 26K simulations per second
+on CPU at batch 64. Sixty-four simulations per move beat the raw policy they search with in
+63\% of games, which the ladder reports as roughly 100 Elo. An AlphaZero-style loop (self-play
+with search, then cross-entropy on visit distributions plus value regression) is included and
+warm-starts from a PPO checkpoint; scaling it is left to future work.
 
 \section{Interface}
-The browser interface draws a square table with a mat for each player. Every move is
-animated from an event the server emits: a bought or reserved card flies to the buyer's mat,
-the replacement flips in from the deck, gems move between the bank and the mats. A finished
-game stays on the table with the standings. The user can seat any mix of people, bots,
-checkpoints, and search agents, and can play with the keyboard.
+A dependency-free browser interface renders a square table with a mat per player, animates
+every move from a structured event emitted by the server (cards flying to mats, replacement
+cards flipping in from the deck, gems moving to and from the bank), holds the finished board
+for inspection with standings, supports keyboard control, and lets the user seat any mix of
+humans, bots, checkpoints and search agents.
 
 \section{Limitations}
-The ratings are relative to bots and to past checkpoints, not to people. The reward includes
-a small shaping term for points. The search uses one deal per move. All runs used one
-desktop.
+No human rating is available, so ``superhuman'' claims cannot be made; the ladder measures
+strength relative to bots and past checkpoints only. Rewards include small prestige-point
+shaping. The search uses a single determinization per move. Runs used one workstation; the
+league is designed to scale to many workers on a GPU host but this was not benchmarked here.
+
+\section{Conclusion}
+A small, exact and fast environment plus a league wrapper gives a clear and cheap path from
+random play to a policy well beyond a strong heuristic in under an hour on a desktop, with
+search as a further multiplier. We hope the code and models are useful as a reproducible
+mid-sized benchmark for multi-agent reinforcement learning.
 
 \begin{thebibliography}{9}
 \bibitem{suarez2024} J.~Suarez. PufferLib: Making reinforcement learning libraries and
