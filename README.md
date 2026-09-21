@@ -172,6 +172,22 @@ searches with about 63% of the time.
 
 ## GUI: watch the agent or play against it
 
+The quickest way to a table is `play.py`: it asks for the player count and
+your seat, picks the opponents for that table size and opens the browser.
+
+```bash
+python play.py                       # asks: how many players, which seat
+python play.py -p 4 -s 2             # 4 players, you are seat 2
+python play.py --model experiments/latest.pt    # a specific checkpoint
+python play.py -p 2 --mcts 64        # opponents search before every move
+```
+
+By default the opponents are the best shipped model for the player count
+(`models/splendor_2p_*.pt` or `models/splendor_4p_*.pt`); with no shipped
+model (3 players) it uses the newest matching checkpoint under `experiments/`,
+else the greedy bot. `--latest` prefers your newest trained checkpoint, and
+`--model PATH` reads the player count from the checkpoint itself.
+
 `gui.py` serves a self-contained web page (Python stdlib only, no extra
 dependencies): a full-screen square table with the board in the centre and a
 mat per player around it (you at the bottom), purchased cards stacked by color
